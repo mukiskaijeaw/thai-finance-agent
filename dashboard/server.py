@@ -23,6 +23,7 @@ from goal_engine import today_bangkok,plan_goals,amount,target_day
 from shared_state import build_shared
 from planning import fit
 from purchase_flow import price_states
+from companion_engine import user_expense_analysis
 
 
 class Dashboard:
@@ -30,7 +31,8 @@ class Dashboard:
         # Browser demo has its own store, distinct from chat demo and real goals.
         self.store=GoalStore(store or ROOT.parent/'local/dashboard-demo.sqlite3')
         self.token=secrets.token_urlsafe(32)
-        self.reviews={};self.lock=threading.Lock()
+        self.reviews={};self.lock=threading.RLock()
+        self.expense_summaries=[]
 
     def inputs(self):return demo_input(today_bangkok())
 
@@ -39,8 +41,20 @@ class Dashboard:
         goals=goal_run(dict(data,action='view'),self.store,current)
         return dict(mode='DEMO',date=current.isoformat(),revision=goals['revision'],
             daily=run_companion(dict(data,action='daily'),self.store,current)['report'],
-            leaks=run_companion(dict(data,action='leaks'),self.store,current)['report'],
+            leaks=user_expense_analysis(self.expense_summaries,current),
             goals=goals,csrf=self.token)
+
+    def expense_summary(self,payload):
+        # In-memory, user-submitted analysis inputs; never a ledger or goal write.
+        action=payload.get('action','add');items=deepcopy(self.expense_summaries)
+        if action=='add':
+            raw=payload['item']
+            items.append(dict(id=secrets.token_hex(8),name=raw.get('name',''),amount=raw.get('amount'),kind=raw.get('kind'),period=raw.get('period')))
+        elif action=='remove':items=[x for x in items if x['id']!=payload.get('id')]
+        else:raise ValueError('unsupported_expense_summary_action')
+        result=user_expense_analysis(items,today_bangkok())
+        self.expense_summaries=items
+        return result
 
     def purchase(self,payload):
         current=today_bangkok();data=self.inputs();snapshot=self.store.read()
@@ -124,7 +138,7 @@ def make_server(port=8877,app=None):
             if not self.valid_host():return self.respond(403,{'error':'invalid_host'})
             path=urlsplit(self.path).path
             if path=='/api/state':return self.respond(200,app.state())
-            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),'/chat.js':('chat.js','text/javascript; charset=utf-8'),'/chat.css':('chat.css','text/css; charset=utf-8')}
+            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),'/chat.js':('chat.js','text/javascript; charset=utf-8'),'/chat.css':('chat.css','text/css; charset=utf-8'),'/expense-ui.js':('expense-ui.js','text/javascript; charset=utf-8')}
             if path not in static:return self.respond(404,{'error':'not_found'})
             name,kind=static[path];self.respond(200,(ROOT/name).read_bytes(),kind)
         def do_POST(self):
@@ -140,6 +154,7 @@ def make_server(port=8877,app=None):
                     elif path=='/api/chat':
                         from chat import respond
                         result=respond(app,payload)
+                    elif path=='/api/expense-summary':result=app.expense_summary(payload)
                     elif path=='/api/travel':result=run_companion(dict(app.inputs(),action='travel',trip=payload['trip']),app.store,today_bangkok())['report']
                     elif path=='/api/review':result=app.review(payload)
                     elif path=='/api/commit':result=app.commit(payload)

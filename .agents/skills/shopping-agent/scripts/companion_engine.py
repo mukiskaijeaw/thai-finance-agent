@@ -155,6 +155,44 @@ def potential_goal_draft(snapshot,goal_id,monthly):
                 notice='ยังไม่เพิ่ม saved_amount หรือเงินพร้อมใช้ ต้องเกิดการประหยัดจริงและยืนยันการกันเงินก่อน')
 
 
+def user_expense_analysis(items,current):
+    """Confirmed monthly summaries, not manufactured transaction rows or defaults."""
+    categories=[];subscriptions=[];controls=[];names=set()
+    for item in items:
+        if not isinstance(item.get('name'),str):raise ValueError('กรุณาระบุชื่อรายจ่ายเป็นข้อความ')
+        name=item['name'].strip()
+        if not name or len(name)>100 or name.casefold() in names:raise ValueError('ชื่อรายจ่ายต้องไม่ซ้ำและยาวไม่เกิน 100 ตัวอักษร')
+        names.add(name.casefold());value=amount(item.get('amount'))
+        if value<=0:raise ValueError('กรอกยอดรายจ่ายมากกว่า 0 ครับ')
+        if item.get('kind')=='expense':
+            if item.get('period')!='monthly':raise ValueError('ยอดรวมหมวดรายจ่ายต้องระบุเป็นรายเดือน')
+            categories.append(dict(name=name,amount=str(value),count=None,source='user_summary'))
+            controls.append(dict(id=item['id'],label='ทดลองลด '+name,values=list(range(0,101,10)),type='range',unit='percent',monthly=str(value),annual=str(value*12)))
+        elif item.get('kind')=='subscription':
+            period=item.get('period')
+            if period not in ('monthly','annual'):raise ValueError('ยืนยันรอบเรียกเก็บบริการก่อนครับ')
+            monthly=floor_money(value if period=='monthly' else value/12)
+            annual=value*12 if period=='monthly' else value
+            subscriptions.append(dict(name=name,amount=str(value),period=period,monthly=str(monthly),annual=str(annual),source='user_summary'))
+            controls.append(dict(id=item['id'],label='ทดลองหยุด '+name,values=[0,1],type='checkbox',unit='subscription',monthly=str(monthly),annual=str(annual)))
+        else:raise ValueError('ประเภทต้องเป็นหมวดรายจ่ายหรือบริการสมาชิก')
+    if len(categories)>2 or len(subscriptions)>3:raise ValueError('จำลองได้ครั้งละ 2 หมวดรายจ่ายและ 3 บริการครับ ลบหรือเปลี่ยนรายการก่อน')
+    largest=max((D(c['amount']) for c in categories),default=D(0))
+    for item in categories:item['bar_percent']=str((D(item['amount'])/largest*100).quantize(D('.1'))) if largest else '0'
+    states={}
+    for choices in product(*(c['values'] for c in controls)):
+        monthly=D(0);annual=D(0)
+        for value,control in zip(choices,controls):
+            fraction=D(value)/100 if control['unit']=='percent' else D(value)
+            monthly+=floor_money(D(control['monthly'])*fraction);annual+=floor_money(D(control['annual'])*fraction)
+        states[','.join(map(str,choices))]=dict(monthly=str(monthly),annual=str(annual))
+    if not items:states={}
+    return dict(source='user_summary' if items else 'none',status='SCENARIO' if items else 'INSUFFICIENT_DATA',items=deepcopy(items),
+        analysis=dict(kind='leaks',categories=categories,subscriptions=subscriptions,duplicate_candidates=[],recurring_candidates=[],unusual_candidates=[],issues=[]),
+        simulation=dict(controls=controls,states=states,notice='คำนวณเฉพาะยอดที่ผู้ใช้ระบุ ไม่มีการสมมติหมวดอื่น เงินที่อาจประหยัดได้ยังไม่ใช่เงินสด'),
+        notice='ข้อมูลสรุปเพื่อจำลองเท่านั้น ไม่ใช่ธุรกรรม ไม่เพิ่มเงินพร้อมใช้หรือยอดออม')
+
+
 def normalize_trip(raw,current):
     trip=deepcopy(raw)
     if not trip.get('destination') or not trip.get('departure'):raise ValueError('destination_and_departure_required')

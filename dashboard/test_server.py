@@ -25,7 +25,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(state['mode'],'DEMO');self.assertEqual(state['goals']['goals'],[])
         self.assertEqual(state['daily']['initial']['available_month'],'6500');self.assertFalse(self.app.store.path.exists())
     def test_static_assets_and_private_files_denied(self):
-        for path in ('/','/app.js','/style.css','/chat.js','/chat.css'):
+        for path in ('/','/app.js','/style.css','/chat.js','/chat.css','/expense-ui.js'):
             with self.request(path) as r:self.assertEqual(r.status,200);self.assertIn("connect-src 'self'",r.headers['Content-Security-Policy'])
         for path in ('/../database.csv','/api/../financial_profile.json','/server.py'):
             with self.assertRaises(HTTPError) as e:self.request(path)
@@ -63,5 +63,11 @@ class DashboardTests(unittest.TestCase):
         with self.request('/api/chat',dict(message='รองเท้า ราคา 2500 ส่งฟรี')) as r:reply=json.load(r)
         self.assertEqual(reply['kind'],'purchase');self.assertEqual(reply['data']['remaining'],'4000')
         self.assertEqual(reply['mode'],'LOCAL_RULES_DEMO');self.assertFalse(self.app.store.path.exists())
+    def test_expense_summary_endpoint_uses_custom_input_only(self):
+        payload=dict(item=dict(name='Custom category',amount='700',kind='expense',period='monthly'))
+        with self.request('/api/expense-summary',payload) as r:report=json.load(r)
+        self.assertEqual(report['analysis']['categories'][0]['name'],'Custom category')
+        self.assertEqual(report['simulation']['states']['10']['monthly'],'70.00')
+        self.assertFalse(self.app.store.path.exists())
 
 if __name__=='__main__':unittest.main()

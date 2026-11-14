@@ -39,6 +39,10 @@ Open `http://127.0.0.1:8877`. Stop the server with Ctrl+C. If the port is occupi
 
 The dashboard runs in **Demo Mode only**. It uses synthetic fixtures and stores goals separately in `local/dashboard-demo.sqlite3`. Its chat uses a deterministic local router, not a connected conversational AI. Live product search and image identification remain available through Codex Chat. Sending messages and moving sliders do not purchase products, transfer money, or record transactions.
 
+## Expense-reduction analysis
+
+The dashboard does not assume preset spending categories or subscriptions. Without user data it shows an empty state, not a savings estimate. Add only your own monthly category totals or explicitly monthly/annual subscriptions. Category sliders use percentages of those amounts; subscription switches are hypothetical. Inputs stay in server memory until restart, never become ledger transactions, and never increase cash or saved balances. Demo financial balances remain separate.
+
 ## Connect local financial data
 
 No financial provider is configured by default. Specify a user-authorized local provider folder with `--finance-dir`. Read its `AGENTS.md` and inspect the actual schema before using the [data contract](.agents/skills/shopping-agent/references/data-contract.md) and [planning contract](.agents/skills/shopping-agent/references/planning-contract.md).

@@ -47,3 +47,5 @@ Reuse purchase-flow-inline.html, goal-planner-inline.html, companion-inline.html
 เงินจริงใช้ local/goals.sqlite3 Demo ต้อง synthetic:true ใช้ tests/fixtures/companion-demo.json กับ local/demo-goals.sqlite3 แยก ไม่มีเป้าหมายตั้งต้น ไม่ผสม provider จริง Potential savings ไม่เพิ่ม cash/saved จนเกิดเงินจริงและผู้ใช้ยืนยัน Mutations ใช้ revision + operation_id + --consent หลัง review
 
 โหลดเฉพาะข้อมูลเกี่ยวข้อง จำ session เฉพาะสินค้า ไม่ใส่การเงินใน modelContent ไม่อ่าน source/templates ทุกครั้ง ไม่อ้าง token savings ที่ไม่ได้วัด ไม่ติดตามเบื้องหลัง ไม่ซื้อ/ใส่ตะกร้า/บันทึก watchlist อัตโนมัติ
+
+Money Leak: ใช้เฉพาะรายการจาก provider ที่อนุญาตหรือยอดสรุปที่ผู้ใช้ให้ ไม่เสนอหมวด/บริการจาก fixtures เป็นค่าเริ่มต้น หากไม่มีข้อมูลให้แสดงสถานะว่าง ไม่แสดงยอดประหยัด 0 เหมือนประเมินแล้ว Dashboard รับยอดสรุปในหน่วยความจำผ่าน expense-summary ไม่บันทึกเป็นธุรกรรม

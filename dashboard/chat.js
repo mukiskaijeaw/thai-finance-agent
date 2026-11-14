@@ -40,7 +40,7 @@ function chatResult(parent,response){const data=response.data;if(response.kind==
     card.append(node('h3','','เป้าหมายของฉัน'));if(!data.goals.length)card.append(node('p','muted','ยังไม่มีเป้าหมายที่บันทึกไว้ครับ'));
     data.goals.forEach(g=>card.append(node('p','',g.goal_name+' · '+g.progress+'% · เหลือ '+money(g.remaining_target_amount))));card.append(button('ดู / สร้างเป้าหมาย',()=>go('goals'),true));
   }else if(response.kind==='leaks'){
-    card.append(node('h3','','รายจ่ายที่บันทึกเดือนนี้'));data.analysis.categories.forEach(c=>{const row=node('div','row-head');row.append(node('span','',c.name+' · '+c.count+' ครั้ง'),node('strong','',money(c.amount)));card.append(row);});card.append(button('ลองลดรายจ่าย',()=>go('leaks'),true));
+    card.append(node('h3','','ข้อมูลรายจ่ายของคุณ'));if(!data.items?.length)card.append(node('p','muted','ยังไม่มีข้อมูล จึงยังไม่คำนวณยอดที่อาจประหยัดได้'));(data.items||[]).forEach(item=>{const row=node('div','row-head');row.append(node('span','',item.name),node('strong','',money(item.amount)+(item.period==='annual'?' / ปี':' / เดือน')));card.append(row);});card.append(button(data.items?.length?'ลองปรับรายจ่าย':'เพิ่มข้อมูลรายจ่าย',()=>go('leaks'),true));
   }else if(response.kind==='travel_setup'){card.append(node('h3','','วางงบทริป'),button('ใส่รายละเอียดทริป',()=>go('travel'),true));}
   parent.append(card);
 }

@@ -60,7 +60,7 @@
       }
       function leaks(){
         const {analysis,simulation}=data.report;view.append(el('h2','','รายจ่ายที่น่าลองลด'));
-        if(!analysis.categories.length)view.append(el('p','fc-muted','ยังมีข้อมูลรายจ่ายไม่พอครับ ส่งรายการหรือเลือกข้อมูลจำลองก่อน'));
+        if(!analysis.categories.length&&!analysis.subscriptions.length){view.append(el('p','fc-muted','ยังไม่มีข้อมูลรายจ่ายให้วิเคราะห์ครับ ผมจะไม่สมมติหมวดหรือบริการที่คุณอาจไม่ได้ใช้ และยังไม่แสดงยอดที่อาจประหยัดได้'));const add=el('button','cursor-interaction','แจ้งข้อมูลรายจ่าย');add.addEventListener('click',()=>send('ช่วยรับข้อมูลรายจ่ายที่ฉันมีจริงเพื่อวิเคราะห์ โดยถามชื่อหมวด ยอดรวมและช่วงเวลาที่จำเป็น ไม่สมมติหมวดหรือรอบบริการ'));view.append(add);return;}
         analysis.categories.forEach(item=>{const box=el('div','fc-category'),head=el('div','fc-category-head');head.append(el('span','',item.name+' · '+item.count+' รายการ'),el('strong','',money(item.amount)));const {bar,fill}=track();fill.style.width=item.bar_percent+'%';box.append(head,bar);view.append(box);});
         if(analysis.duplicate_candidates.length)view.append(el('p','fc-muted','พบรายการที่อาจซ้ำ '+analysis.duplicate_candidates.length+' กลุ่ม ต้องตรวจหลักฐาน ไม่ลบหรือคืนเงินให้เอง'));
         if(analysis.recurring_candidates?.length)view.append(el('p','fc-muted','พบคำอธิบายรายการซ้ำข้ามเดือน '+analysis.recurring_candidates.length+' รายการ ยังไม่ถือว่าเป็น Subscription โดยอัตโนมัติ'));

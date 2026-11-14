@@ -15,7 +15,8 @@ def respond(app,payload):
     if any(w in lower for w in ('เงินเหลือ','เหลือเงิน','เช็กงบ','เช็คงบ','งบวันนี้','ใช้เงินได้','/budget')):
         return answer('นี่คืองบจำลองล่าสุดครับ กันภาระและเป้าหมายแล้ว ยังไม่มีการบันทึกรายจ่ายจากแชท','daily',app.state()['daily'])
     if any(w in lower for w in ('ลดรายจ่าย','จับโป๊ะ','รูรั่ว','subscription','spotify','/leaks')):
-        return answer('ลองดูหมวดที่อาจลดได้ครับ เงินที่อาจประหยัดยังไม่ใช่เงินสด และไม่ได้แปลว่า Subscription ไหนไม่ได้ใช้','leaks',app.state()['leaks'])
+        data=app.state()['leaks']
+        return answer('ยังไม่มีข้อมูลรายจ่ายสำหรับวิเคราะห์ครับ เพิ่มเฉพาะรายการที่คุณมีจริงก่อน ผมจะไม่สมมติหมวดหรือบริการให้เอง' if not data.get('items') else 'ลองปรับเฉพาะรายการที่คุณระบุครับ เงินที่อาจประหยัดยังไม่ใช่เงินสด และไม่ได้แปลว่า Subscription ไหนไม่ได้ใช้','leaks',data)
     if any(w in lower for w in ('เป้าหมาย','เก็บเงิน','แผนออม','/goals')):
         return answer('ดูหรือสร้างแผนต่อได้ครับ การพิมพ์อย่างเดียวจะยังไม่บันทึกเป้าหมาย','goals',app.state()['goals'])
     if any(w in lower for w in ('ไปเที่ยว','วางแผนเที่ยว','ทริป','/travel')):
