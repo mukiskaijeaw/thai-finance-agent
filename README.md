@@ -1,53 +1,53 @@
 # Shopping Agent
 
-Shopping Skill สำหรับ Codex พร้อมเครื่องคำนวณการเงินในเครื่อง เป้าหมายการออม และตัวอย่างแชท Shopping สีขาว–ดำ ไม่ใช้ API แบบเสียเงินและไม่ส่งข้อมูลการเงินออกไปค้นสินค้า
+A Codex skill for evidence-based shopping decisions, local financial calculations, and savings goals.
 
-## ใช้กับ Codex
+## Use with Codex
 
-Clone repository นี้แล้วเปิดโฟลเดอร์ใน Codex จากนั้นเรียก:
+Clone this repository and open the folder in Codex. Then invoke:
 
 ```text
 $shopping-agent
-$shopping-agent ช่วยเปรียบเทียบรองเท้ารุ่นที่ฉันสนใจ
-$shopping-agent อยากเก็บเงินซื้อของ ต้องเริ่มยังไง
+$shopping-agent Compare the shoes I am interested in.
+$shopping-agent Help me plan how to save for a purchase.
 ```
 
-Skill อยู่ที่ [`.agents/skills/shopping-agent/SKILL.md`](.agents/skills/shopping-agent/SKILL.md) หากต้องการติดตั้งในพื้นที่ skills ของผู้ใช้ ให้คัดลอกโฟลเดอร์ `shopping-agent` ภายใน `.agents/skills/` ไปยังโฟลเดอร์ skills ที่ Codex ของคุณใช้งาน แล้วเริ่ม session ใหม่
+The skill is located at [`.agents/skills/shopping-agent/SKILL.md`](.agents/skills/shopping-agent/SKILL.md). To install it in your user skills directory, copy the entire `shopping-agent` folder from `.agents/skills/` into the skills directory used by your Codex installation, then start a new session.
 
-ชื่อ/รูป/URL สินค้าใช้ระบุสินค้าและหาหลักฐานผ่านเครื่องมือของ Codex ที่มีอยู่ การค้นหาร้านค้าไม่ได้ทำโดย Python engine และไม่มี API key รวมอยู่ใน repo ความสามารถ inline UI ขึ้นอยู่กับ host; มี Markdown/Native Selection เป็นทางเลือก
+Product names, images, and URLs are interpreted using the tools available in Codex. The Python financial engine does not search merchant websites. Inline UI support depends on the host; Markdown and native selection are available as fallbacks.
 
-## สิ่งที่ทำได้
+## Features
 
-- ระบุสินค้าและยืนยันรุ่น แยก identification confidence กับ listing-match confidence
-- เทียบราคาจากหลักฐาน รวมค่าส่งที่ยืนยันและส่วนลดที่มีสิทธิ์จริง
-- Financial Fit, ระยะเวลาเก็บเงิน และเปรียบเทียบผลกระทบด้วย Python
-- เป้าหมายหลายประเภท การจัดสรรงบร่วมกัน ปฏิทิน และการป้องกันบันทึกซ้ำ
-- งบรายวัน Money Leak และวางงบทริปด้วยเครื่องคำนวณชุดเดียวกัน
-- ตัวอย่าง Dashboard บนเครื่อง พร้อมแชทขาว–ดำที่รับชื่อสินค้า ราคา และค่าส่งต่อเนื่องกันได้
+- Product identification and model confirmation, with separate identification and listing-match confidence.
+- Evidence-based price comparison, including verified shipping and eligible discounts.
+- Deterministic Financial Fit, time-to-afford, and purchase-impact calculations.
+- Multiple savings goals, shared budget allocation, calendars, and duplicate-entry protection.
+- Daily spending budgets, expense-reduction scenarios, and travel budgets using the same financial engines.
+- An optional local dashboard with a shopping chat interface.
 
-## เปิด Dashboard ตัวอย่าง
+## Run the local dashboard
 
-ใช้ Python 3.10 ขึ้นไป ไม่ต้องติดตั้งแพ็กเกจสำหรับฟังก์ชันหลัก
+Use Python 3.10 or later. Core features require only the Python standard library.
 
-Windows: ดับเบิลคลิก `start-dashboard.bat` หรือรันจากโฟลเดอร์ repo:
+On Windows, double-click `start-dashboard.bat`, or run this command from the repository root:
 
 ```sh
 python dashboard/server.py --open
 ```
 
-เปิด `http://127.0.0.1:8877` หยุดด้วย Ctrl+C หากพอร์ตถูกใช้ ให้เพิ่ม `--port 8878`
+Open `http://127.0.0.1:8877`. Stop the server with Ctrl+C. If the port is occupied, add `--port 8878`.
 
-Dashboard เป็น **Demo Mode เท่านั้น** ใช้ข้อมูลจำลองจาก fixtures และเก็บเป้าหมายแยกใน `local/dashboard-demo.sqlite3` แชทเป็น local rule router ไม่ใช่ AI สนทนาอิสระ ยังไม่ค้นหาราคาสดหรืออ่านรูปเอง ใช้ Codex Chat สำหรับการค้นหาจริง การพิมพ์ข้อความและเลื่อน Slider ไม่ซื้อสินค้า ไม่โอนเงิน และไม่บันทึกธุรกรรม
+The dashboard runs in **Demo Mode only**. It uses synthetic fixtures and stores goals separately in `local/dashboard-demo.sqlite3`. Its chat uses a deterministic local router, not a connected conversational AI. Live product search and image identification remain available through Codex Chat. Sending messages and moving sliders do not purchase products, transfer money, or record transactions.
 
-## เชื่อมข้อมูลการเงินจริง
+## Connect local financial data
 
-ยังไม่มี provider ถูกเลือกโดยปริยาย ให้ระบุโฟลเดอร์ provider ภายในเครื่องที่ผู้ใช้อนุญาตด้วย `--finance-dir` เท่านั้น อ่าน AGENTS.md และตรวจ schema จริงก่อนใช้ตาม [data contract](.agents/skills/shopping-agent/references/data-contract.md) และ [planning contract](.agents/skills/shopping-agent/references/planning-contract.md)
+No financial provider is configured by default. Specify a user-authorized local provider folder with `--finance-dir`. Read its `AGENTS.md` and inspect the actual schema before using the [data contract](.agents/skills/shopping-agent/references/data-contract.md) and [planning contract](.agents/skills/shopping-agent/references/planning-contract.md).
 
-ไม่มี ledger สลิป profile จริง หรือ API key อยู่ใน repo ห้ามเพิ่มข้อมูลเหล่านี้ใน commit ค่าไม่ทราบ/ศูนย์ที่ยังไม่ยืนยันไม่ถือว่าเป็นศูนย์ และข้อมูลธุรกรรมไม่ใช่ยอดบัญชีปัจจุบัน
+This repository contains no real ledger, receipts, financial profile, or credentials. Do not commit these files. Missing or unconfirmed values remain unknown, and transaction totals must not be interpreted as current account balances.
 
-CLI รับ payload ผ่าน stdin หรือไฟล์ local ที่ gitignore ไว้ ไม่ใส่ข้อมูลส่วนตัวใน arguments ดู workflow ใน Skill และ references ที่เกี่ยวข้อง การสร้างหรือเปลี่ยนเป้าหมายต้องยืนยันก่อนเสมอ หากติดตั้ง skill แบบใช้ร่วมหลายโปรเจกต์ ให้ระบุ `--store <workspace>/local/goals.sqlite3` หรือกำหนด `SHOPPING_WORKSPACE` เพื่อแยกข้อมูล
+Pass CLI payloads through stdin or an ignored local file. Do not put private financial data in command-line arguments. Creating or changing a goal requires explicit confirmation. When sharing an installed skill across projects, use `--store <workspace>/local/goals.sqlite3` or set `SHOPPING_WORKSPACE` to keep project data separate.
 
-## ทดสอบ
+## Tests
 
 ```sh
 python -m unittest discover -s .agents/skills/shopping-agent/tests -p "test_*.py"
@@ -55,11 +55,11 @@ python -m unittest discover -s dashboard -p "test_*.py"
 python .agents/skills/shopping-agent/scripts/test_comparison_states.py
 ```
 
-มี Node.js จึงรันการทดสอบ UI แบบ DOM จำลองเพิ่มได้:
+With Node.js installed, run the simulated UI tests:
 
 ```sh
 node --test .agents/skills/shopping-agent/component_tests/test_companion_dom.cjs .agents/skills/shopping-agent/component_tests/test_goal_dom.cjs .agents/skills/shopping-agent/component_tests/test_purchase_dom.cjs
 python .agents/skills/shopping-agent/scripts/test_simulator_view.py --node node
 ```
 
-การทดสอบ PNG เป็นตัวเลือกแยก ต้องมี Pillow และฟอนต์ไทยที่ renderer รองรับ ฟังก์ชันการเงินหลักไม่ import Pillow ชุดทดสอบใช้ข้อมูลจำลอง/ฐานข้อมูลชั่วคราว การทดสอบ DOM ไม่ใช่หลักฐานว่าปุ่ม inline ทำงานใน Codex ทุกเวอร์ชัน
+Optional PNG renderer tests require Pillow and supported Thai fonts. Core financial commands do not import Pillow. Tests use synthetic data and temporary databases. DOM simulations do not certify inline behavior in every Codex version.
