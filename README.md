@@ -8,8 +8,8 @@ Clone this repository and open the folder in Codex. Then invoke:
 
 ```text
 $shopping-agent
-$shopping-agent Compare the shoes I am interested in.
-$shopping-agent Help me plan how to save for a purchase.
+$shopping-agent ช่วยเปรียบเทียบรองเท้าที่ฉันสนใจ
+$shopping-agent อยากซื้อของ ช่วยวางแผนเก็บเงินให้หน่อย
 ```
 
 The skill is located at [`.agents/skills/shopping-agent/SKILL.md`](.agents/skills/shopping-agent/SKILL.md). To install it in your user skills directory, copy the entire `shopping-agent` folder from `.agents/skills/` into the skills directory used by your Codex installation, then start a new session.
