@@ -17,6 +17,11 @@ def respond(app,payload):
     if any(w in lower for w in ('ลดรายจ่าย','จับโป๊ะ','รูรั่ว','subscription','spotify','/leaks')):
         data=app.state()['leaks']
         return answer('ยังไม่มีข้อมูลรายจ่ายสำหรับวิเคราะห์ครับ เพิ่มเฉพาะรายการที่คุณมีจริงก่อน ผมจะไม่สมมติหมวดหรือบริการให้เอง' if not data.get('items') else 'ลองปรับเฉพาะรายการที่คุณระบุครับ เงินที่อาจประหยัดยังไม่ใช่เงินสด และไม่ได้แปลว่า Subscription ไหนไม่ได้ใช้','leaks',data)
+    goal_match=re.search(r'(?:อยากได้|อยากซื้อ|เก็บเงินซื้อ)\s*(.+?)\s*(?:ก่อน|ภายใน|ให้ทัน)\s*(สิ้นเดือน|สิ้นปี)',text)
+    if goal_match and ('กันงบ' in text or 'เก็บเงิน' in text or 'เป้าหมาย' in text):
+        from goal_engine import target_day,today_bangkok
+        goal=dict(goal_name=goal_match.group(1).strip(),goal_category='purchase',target_date=target_day(goal_match.group(2),today_bangkok()).isoformat(),funding_source='free_cash')
+        return answer('ได้ครับ ผมเตรียมเป้าหมายให้แล้ว ขอราคาหรือยอดเป้าหมายและยอดที่เก็บไว้จริงก่อนตรวจแผน ยังไม่บันทึกจนกว่าคุณยืนยันครับ','goal_draft',goal)
     if any(w in lower for w in ('เป้าหมาย','เก็บเงิน','แผนออม','/goals')):
         return answer('ดูหรือสร้างแผนต่อได้ครับ การพิมพ์อย่างเดียวจะยังไม่บันทึกเป้าหมาย','goals',app.state()['goals'])
     if any(w in lower for w in ('ไปเที่ยว','วางแผนเที่ยว','ทริป','/travel')):

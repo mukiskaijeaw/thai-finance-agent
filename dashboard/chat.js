@@ -36,6 +36,7 @@ function chatResult(parent,response){const data=response.data;if(response.kind==
     const actions=node('div','actions');actions.append(button('วางแผนเก็บเงิน',()=>{go('goals');view.querySelector('form').replaceWith(goalForm(data.goal));},true),button('ดูรายจ่ายที่ลดได้',()=>go('leaks')));card.append(actions);
   }else if(response.kind==='daily'){
     const r=data.initial;card.append(node('span','pill','งบวันนี้ · DEMO'),node('h3','','วันนี้ยังใช้เพิ่มได้'),node('div','big',money(r.today_remaining)));track(card,r.spending_progress);const stats=node('div','stats');metric(stats,'ใช้ไปวันนี้',r.today_recorded);metric(stats,'เงินพร้อมใช้เดือนนี้',r.available_month);card.append(stats,node('p','muted',r.message),button('ทดลองปรับงบวันนี้',()=>go('daily')));
+  }else if(response.kind==='goal_draft'){card.append(node('h3','','เป้าหมาย: '+data.goal_name),node('p','muted','วันที่ต้องการ: '+data.target_date),button('ตรวจและเติมข้อมูลเป้าหมาย',()=>{go('goals');view.querySelector('form').replaceWith(goalForm(data));},true));
   }else if(response.kind==='goals'){
     card.append(node('h3','','เป้าหมายของฉัน'));if(!data.goals.length)card.append(node('p','muted','ยังไม่มีเป้าหมายที่บันทึกไว้ครับ'));
     data.goals.forEach(g=>card.append(node('p','',g.goal_name+' · '+g.progress+'% · เหลือ '+money(g.remaining_target_amount))));card.append(button('ดู / สร้างเป้าหมาย',()=>go('goals'),true));

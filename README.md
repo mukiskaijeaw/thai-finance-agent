@@ -24,6 +24,7 @@ Product names, images, and URLs are interpreted using the tools available in Cod
 - Multiple savings goals, shared budget allocation, calendars, and duplicate-entry protection.
 - Daily spending budgets, expense-reduction scenarios, and travel budgets using the same financial engines.
 - An optional local dashboard with a shopping chat interface.
+- A curated set of airport destinations and two user-provided wallet expressions for the daily budget view.
 
 ## Run the local dashboard
 
@@ -38,6 +39,8 @@ python dashboard/server.py --open
 Open `http://127.0.0.1:8877`. Stop the server with Ctrl+C. If the port is occupied, add `--port 8878`.
 
 The dashboard runs in **Demo Mode only**. It uses synthetic fixtures and stores goals separately in `local/dashboard-demo.sqlite3`. Its chat uses a deterministic local router, not a connected conversational AI. Live product search and image identification remain available through Codex Chat. Sending messages and moving sliders do not purchase products, transfer money, or record transactions.
+
+The travel destination suggestions are a curated list, not a live flight schedule; other locations can be typed. A chat request such as `I want shoes before the end of the month` (in Thai) can prepare a draft goal, which must be reviewed and confirmed before saving. The wallet expression reflects the calculated daily budget status.
 
 ## Expense-reduction analysis
 

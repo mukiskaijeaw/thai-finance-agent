@@ -8,6 +8,12 @@ class ChatTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.app=Dashboard(Path(self.temp.name)/'local/test.sqlite3')
+    def test_goal_request_creates_only_uncommitted_draft(self):
+        from goal_engine import target_day,today_bangkok
+        r=respond(self.app,dict(message='อยากได้รองเท้า ก่อนสิ้นเดือน กันงบให้หน่อย'))
+        self.assertEqual(r['kind'],'goal_draft');self.assertEqual(r['data']['goal_name'],'รองเท้า')
+        self.assertEqual(r['data']['target_date'],target_day('สิ้นเดือน',today_bangkok()).isoformat())
+        self.assertNotIn('target_amount',r['data']);self.assertFalse(self.app.store.path.exists())
     def test_name_followup_price_shipping_same_context(self):
         first=respond(self.app,dict(message='อยากซื้อ Puma Cali Court Match'))
         self.assertEqual(first['context']['name'],'Puma Cali Court Match');self.assertEqual(first['kind'],'message')

@@ -138,7 +138,7 @@ def make_server(port=8877,app=None):
             if not self.valid_host():return self.respond(403,{'error':'invalid_host'})
             path=urlsplit(self.path).path
             if path=='/api/state':return self.respond(200,app.state())
-            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),'/chat.js':('chat.js','text/javascript; charset=utf-8'),'/chat.css':('chat.css','text/css; charset=utf-8'),'/expense-ui.js':('expense-ui.js','text/javascript; charset=utf-8')}
+            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),'/chat.js':('chat.js','text/javascript; charset=utf-8'),'/chat.css':('chat.css','text/css; charset=utf-8'),'/expense-ui.js':('expense-ui.js','text/javascript; charset=utf-8'),'/assets/wallet-normal.png':('assets/wallet-normal.png','image/png'),'/assets/wallet-angry.png':('assets/wallet-angry.png','image/png')}
             if path not in static:return self.respond(404,{'error':'not_found'})
             name,kind=static[path];self.respond(200,(ROOT/name).read_bytes(),kind)
         def do_POST(self):

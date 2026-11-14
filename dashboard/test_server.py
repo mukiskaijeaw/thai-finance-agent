@@ -27,6 +27,9 @@ class DashboardTests(unittest.TestCase):
     def test_static_assets_and_private_files_denied(self):
         for path in ('/','/app.js','/style.css','/chat.js','/chat.css','/expense-ui.js'):
             with self.request(path) as r:self.assertEqual(r.status,200);self.assertIn("connect-src 'self'",r.headers['Content-Security-Policy'])
+        for path in ('/assets/wallet-normal.png','/assets/wallet-angry.png'):
+            with self.request(path) as r:
+                self.assertEqual(r.status,200);self.assertEqual(r.headers['Content-Type'],'image/png');self.assertEqual(r.read(8),b'\x89PNG\r\n\x1a\n')
         for path in ('/../database.csv','/api/../financial_profile.json','/server.py'):
             with self.assertRaises(HTTPError) as e:self.request(path)
             self.assertEqual(e.exception.code,404)
