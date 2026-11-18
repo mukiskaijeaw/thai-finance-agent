@@ -33,10 +33,18 @@ def render_purchase(session, demo=False):
 def render_purchase_markdown(session):
     report=session.get('report')
     if report:
-        return '\n'.join([report['product']['name'],report['decision']['label'],
+        lines=[report['product']['name'],report['decision']['label'],
             'Financial Fit: '+report['financial']['status'],
             'ราคาสุทธิ: '+str(report['quote']['effective'] or 'ยังไม่ยืนยัน'),
-            'เงินเหลือ: '+str(report['remaining_after_purchase'] or 'ยังประเมินไม่ได้')])
+            'เงินเหลือ: '+str(report['remaining_after_purchase'] if report['remaining_after_purchase'] is not None else 'ยังประเมินไม่ได้')]
+        advisory=report.get('advisory_context') or {}
+        if advisory.get('estimated_budget') is not None:
+            lines.append('งบประมาณโดยประมาณ: '+str(advisory['estimated_budget'])+' บาท (ไม่ใช่ยอดเงินสด)')
+        elif advisory.get('unadjusted_recorded_remainder') is not None:
+            lines.append('รายรับที่ได้รับหักรายจ่ายที่บันทึก: '+str(advisory['unadjusted_recorded_remainder'])+' บาท (ยังไม่หักภาระที่ไม่ทราบ)')
+        if report['financial']['status']=='INSUFFICIENT_DATA':
+            lines.append('ยังเปรียบเทียบสินค้าและเสนองบเบื้องต้นตามข้อมูลที่มีได้ครับ')
+        return '\n'.join(lines)
     choices=session.get('candidates',[])
     if choices:return '\n'.join(p['name']+' — '+p['source'] for p in choices)
     return 'อยากได้สินค้าอะไรครับ? พิมพ์ชื่อ รุ่น ลิงก์ หรือแนบรูปในแชทได้เลย'

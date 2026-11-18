@@ -19,6 +19,15 @@ class CompanionTests(unittest.TestCase):
         self.store=GoalStore(Path(self.temp.name)/'local'/'goals.sqlite3');self.data=demo_input(DAY)
     def shared(self):return build_shared(self.data['profile'],self.data['budget'],self.store.read(),DAY)
     def call(self,action,**fields):return run_companion(dict(action=action,synthetic=True,**fields),self.store,DAY)
+    def test_daily_and_purchase_share_income_cycle(self):
+        from purchase_flow import price_states
+        data=self.data;data['budget']['next_income_date']='2026-12-14';data['budget']['obligations']=[]
+        shared=build_shared(data['profile'],data['budget'],self.store.read(),DAY)
+        daily=daily_spending(shared,[],DAY,balance_includes_today=True)
+        self.assertEqual(daily['today_budget'],'209.67');self.assertEqual(daily['saving_days'],31)
+        sim=price_states(dict(available_spending='6500',portfolio=shared['portfolio'],quote=dict(effective='0'),decision=dict(recommendation='NEED_MORE_INFO')),DAY)
+        self.assertEqual(sim['states'][0]['daily_spending'],'209.67')
+
     def test_demo_reconciles_without_default_goal(self):
         rows=self.data['transactions'];spent=sum((D(r['amount_thb']) for r in rows if r['transaction_type']=='expense'),D(0))
         self.assertEqual(spent,D(13000));self.assertEqual(D(30000)-spent-D(5000),D(12000))
@@ -30,10 +39,16 @@ class CompanionTests(unittest.TestCase):
     def test_balance_coverage_must_be_confirmed(self):
         r=daily_spending(self.shared(),self.data['transactions'],DAY)
         self.assertEqual(r['status'],'INSUFFICIENT_DATA')
+    def test_income_cycle_crosses_month(self):
+        p={'status':'FEASIBLE','remaining_spending_budget':'6500','budget':{'recommended_budget':'6500','cycle_end':'2026-12-14'}}
+        r=daily_spending({'portfolio':p},[],DAY,balance_includes_today=True)
+        self.assertEqual(r['saving_days'],31);self.assertEqual(r['today_budget'],'209.67')
+        s=price_states({'available_spending':'6500','portfolio':p,'quote':{'effective':'1000'},'decision':{'recommendation':'BUY_NOW'}},DAY)
+        self.assertEqual(next(x for x in s['states'] if x['price']=='0.00')['daily_spending'],'209.67')
     def test_month_last_day_has_no_tomorrow_division(self):
         end=date(2026,11,30)
         r=run_companion(dict(action='daily',synthetic=True),self.store,end)['report']['initial']
-        self.assertIsNone(r['tomorrow_daily']);self.assertEqual(r['saving_days'],1)
+        self.assertIsNotNone(r['tomorrow_daily']);self.assertEqual(r['saving_days'],2)
     def test_daily_simulation_has_no_writes(self):
         report=self.call('daily')['report'];self.assertGreater(len(report['states']),1)
         self.assertLess(D(report['states'][-1]['available_month']),D(report['initial']['available_month']))
@@ -83,7 +98,7 @@ class CompanionTests(unittest.TestCase):
         rows=calendar_rows(g,DAY);self.assertEqual(len(rows),30);self.assertEqual(rows[0]['weekday'],6);self.assertEqual(rows[0]['state'],'inactive');self.assertTrue(rows[27]['target'])
     def test_demo_store_separate(self):self.assertNotEqual(default_store(True),default_store(False))
     def test_price_simulation_does_not_replace_quote(self):
-        report=dict(available_spending='6500',quote=dict(effective='3200'),decision=dict(recommendation='BUY_WITH_CAUTION'))
+        report=dict(available_spending='6500',portfolio={'budget':{'cycle_end':'2026-12-14'}},quote=dict(effective='3200'),decision=dict(recommendation='BUY_WITH_CAUTION'))
         original=copy.deepcopy(report);r=price_states(report,DAY)
         self.assertEqual(r['states'][r['initial']]['remaining'],'3300');self.assertEqual(report,original)
         self.assertEqual(r['states'][-1]['status'],'WAIT_AND_SAVE')

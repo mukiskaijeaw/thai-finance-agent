@@ -105,7 +105,7 @@ def financial_cards(payload, report):
     advice={'AFFORDABLE':'ซื้อได้ตามงบที่ยืนยัน โดยคงเงินสำรองและเป้าหมายออมไว้ ตรวจสต็อกและยอดจ่ายอีกครั้งก่อนซื้อ',
             'SAVE_FIRST':'แนะนำเก็บเงินเพิ่มตามแผนก่อนซื้อ โดยไม่ถอนเงินสำรองหรือเงินออมที่กันไว้',
             'NOT_AFFORDABLE':'แนะนำชะลอซื้อและจัดการภาระที่ยังไม่ครอบคลุมก่อน หรือพิจารณาตัวเลือกที่ถูกลง',
-            'INSUFFICIENT_DATA':'ยังไม่สรุปว่าซื้อไหว ยืนยันราคาสุทธิและข้อมูลการเงินที่ขาดก่อน'}
+            'INSUFFICIENT_DATA':'ยังยืนยันว่าซื้อไหวไม่ได้ แต่เปรียบเทียบสินค้าและเสนองบเบื้องต้นจากข้อมูลที่มีได้'}
     labels={'income':'รายได้สุทธิ','essential':'รายจ่ายจำเป็น','debt':'ยอดชำระหนี้ต่อเดือน','saving':'เป้าหมายออมต่อเดือน',
             'cash':'เงินสดปัจจุบัน','emergency':'เงินสำรองฉุกเฉิน','reserved':'เงินกันภาระค้างจ่าย'}
     demo=report.get('data_mode')=='demo'
@@ -332,7 +332,7 @@ def save_watchlist(path, product, consent=False):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('welcome','evaluate','decision','plan','goal','goals','purchase','companion','ledger','query','watchlist','demo'))
+    parser.add_argument('command',choices=('welcome','evaluate','decision','plan','goal','goals','purchase','companion','ledger','history','context','advisory','value','price_compare','query','watchlist','demo'))
     parser.add_argument('--finance-dir',default=os.environ.get('FINANCE_DIR'),help='Optional local Pillar 1 source, used only for financial intent; no source is connected by default')
     parser.add_argument('--profile-path')
     parser.add_argument('--input',help='Local JSON; omitted means stdin. Avoid financial data in command arguments.')
@@ -359,10 +359,43 @@ def main(argv=None):
             if len(raw)>1000000:
                 raise ValueError('request too large')
             payload=json.loads(raw)
-            if payload.get('synthetic') is True and (args.command=='goals' or (args.command=='purchase' and payload.get('action') in ('evaluate','select_and_evaluate','change_date','buy_today','goal_preview','start_goal','confirm_goal'))):
+            if payload.get('synthetic') is True and (args.command=='goals' or (args.command=='purchase' and payload.get('action') in ('evaluate','select_and_evaluate','change_date','buy_today','goal_preview','start_goal','confirm_goal','simulation_goal'))):
                 from companion import demo_input
                 payload={**demo_input(today()),**payload}
-            if args.command=='companion':
+            if args.command=='advisory':
+                from advisory import monthly_allocation
+                result=monthly_allocation(payload)
+            elif args.command=='value':
+                from engine import cost_per_use_comparison
+                result=cost_per_use_comparison(payload)
+            elif args.command=='price_compare':
+                from engine import compare_product_prices
+                result=compare_product_prices(payload)
+            elif args.command=='context':
+                from shared_state import cross_skill_context
+                result=cross_skill_context(payload.get('facts',[]),payload.get('classifications'))
+                if payload.get('financial_context') is not None:
+                    from shared_state import financial_context_fallback
+                    rows=payload.get('transactions')
+                    if not isinstance(rows,list):raise ValueError('transactions_required_for_financial_context')
+                    result['financial_context']=financial_context_fallback(rows,today(),payload['financial_context'])
+            elif args.command=='history':
+                from shared_state import load_transactions, historical_summary, monthly_shopping_budget, financial_context_fallback
+                if not args.finance_dir: raise ValueError('finance_source_not_configured')
+                if not (Path(args.finance_dir)/'AGENTS.md').is_file(): raise ValueError('finance_rules_not_found')
+                rows=load_transactions(args.finance_dir,today().strftime('%Y-%m'),3)
+                result=historical_summary(rows,today(),payload.get('complete_months',[]))
+                if payload.get('financial_context') is not None:
+                    request=dict(payload['financial_context'])
+                    cycle=dict(request.get('cycle') or {})
+                    now=today();ordinal=now.year*12+now.month-1-2
+                    cycle['loaded_since']=f'{ordinal//12:04d}-{ordinal%12+1:02d}-01'
+                    request['cycle']=cycle
+                    request['complete_months']=payload.get('complete_months',[])
+                    result['financial_context']=financial_context_fallback(rows,now,request)
+                if 'monthly_plan' in payload:
+                    result['monthly_plan'] = monthly_shopping_budget(payload['monthly_plan'])
+            elif args.command=='companion':
                 from companion import run_companion,render_companion
                 from goal_storage import GoalStore,default_store
                 from shared_state import load_transactions
@@ -386,10 +419,16 @@ def main(argv=None):
                 from purchase_renderer import render_purchase,render_purchase_markdown
                 from goal_storage import GoalStore,default_store
                 store=GoalStore(args.store or default_store(payload.get('synthetic') is True))
-                financial_actions=('evaluate','select_and_evaluate','change_date','buy_today','goal_preview','start_goal','confirm_goal')
+                financial_actions=('evaluate','select_and_evaluate','change_date','buy_today','goal_preview','start_goal','confirm_goal','simulation_goal')
                 if args.finance_dir and payload.get('synthetic') is not True and payload.get('action') in financial_actions and 'profile' not in payload:
-                    provider=load_finance(args.finance_dir,today(),args.profile_path)
+                    profile_path=args.profile_path
+                    candidate=Path(args.finance_dir).resolve()/'financial_profile.json'
+                    if profile_path is None and candidate.is_file():profile_path=str(candidate)
+                    provider=load_finance(args.finance_dir,today(),profile_path)
                     payload={**payload,'profile':provider.get('profile',{})}
+                if args.finance_dir and payload.get('synthetic') is not True and payload.get('action') in financial_actions and 'transactions' not in payload:
+                    from shared_state import load_transactions
+                    payload={**payload,'transactions':load_transactions(args.finance_dir,today().strftime('%Y-%m'),3)}
                 result=run_purchase(payload,store,today(),args.consent)
                 if args.format=='inline':
                     if not args.output:raise ValueError('--output required for inline fragment')

@@ -1,7 +1,7 @@
 """Local, deterministic calculations. All monetary outputs are decimal strings."""
 import csv
 from datetime import date
-from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 
 SCHEMA = 'transaction_id,date,transaction_type,description,amount_thb,category,action,year_month,source,source_reference,data_quality_flag,model,token_input,token_output'.split(',')
 FIELDS = ('income', 'essential', 'debt', 'saving', 'cash', 'emergency', 'reserved')
@@ -16,6 +16,45 @@ def money(value):
     if not n.is_finite() or n < 0 or n > Decimal('1000000000000000') or n.as_tuple().exponent < -2:
         raise ValueError('amount must be nonnegative, finite, with at most two decimals')
     return n
+
+def compare_product_prices(request):
+    """Compare supplied product prices only; no inferred shipping, discount or stock."""
+    items=request.get('items')
+    if not isinstance(items,list) or len(items)!=2:raise ValueError('exactly_two_prices_required')
+    a,b=items
+    if not all(isinstance(x,dict) and isinstance(x.get('name'),str) and x['name'].strip() for x in items):
+        raise ValueError('item_names_required')
+    if a['name'].strip().casefold()==b['name'].strip().casefold():raise ValueError('distinct_names_required')
+    left,right=money(a.get('price')),money(b.get('price'))
+    lower=None if left==right else a['name'] if left<right else b['name']
+    return {'items':[{'name':a['name'],'price':str(left)},{'name':b['name'],'price':str(right)}],
+            'lower_priced':lower,'difference':str(abs(left-right)),
+            'notice':'Only the supplied prices are compared; unverified fees, discounts and stock are not inferred.'}
+
+def cost_per_use_comparison(request):
+    """Calculate supplied scenarios only; missing ownership costs remain unknown."""
+    items=request.get('items')
+    if not isinstance(items,list) or not 1<=len(items)<=3:raise ValueError('one_to_three_items_required')
+    results=[];names=set()
+    for item in items:
+        if not isinstance(item,dict):raise ValueError('invalid_item')
+        name=item.get('name')
+        if not isinstance(name,str) or not name.strip() or name in names:raise ValueError('unique_item_name_required')
+        names.add(name)
+        price=money(item.get('price'));uses=money(item.get('weekly_usage'));years=money(item.get('ownership_years'))
+        if uses<=0 or years<=0 or uses>Decimal('168') or years>Decimal('100'):raise ValueError('usage_and_duration_must_be_positive_and_plausible')
+        certainty=item.get('usage_basis')
+        if certainty not in ('CONFIRMED','ASSUMED'):raise ValueError('usage_basis_required')
+        total_uses=uses*Decimal(52)*years
+        extra=item.get('additional_costs')
+        total=None if extra is None else price+money(extra)
+        results.append({'name':name,'price':str(price),'weekly_usage':str(uses),'ownership_years':str(years),
+                        'usage_basis':certainty,'expected_total_uses':str(total_uses),
+                        'additional_costs':None if extra is None else str(money(extra)),
+                        'total_ownership_cost':None if total is None else str(total),
+                        'cost_per_use':None if total is None else str((total/total_uses).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)),
+                        'price_only_per_use':str((price/total_uses).quantize(Decimal('.01'),rounding=ROUND_HALF_UP))})
+    return {'items':results,'notice':'Estimates depend on usage and ownership duration; lifespan is not guaranteed. Unknown additional costs are not zero.'}
 
 def fresh(value, today, days):
     try:

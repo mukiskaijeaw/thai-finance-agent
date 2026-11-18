@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import timedelta
 from goal_engine import target_day,amount
 from shared_state import build_shared
-from companion_engine import daily_states,money_leaks,reduction_states,travel_states,potential_goal_draft
+from companion_engine import daily_states,money_leaks,reduction_states,travel_states,potential_goal_draft,cycle_spending_alert
 
 
 def demo_input(current):
@@ -36,6 +36,8 @@ def run_companion(request,store,current):
     shared=build_shared(data.get('profile',{}),data.get('budget',{}),snapshot,current,data.get('forecast'),data.get('coverage')) if action in ('daily','travel') else None
     if action=='daily':
         report=daily_states(shared,rows,current,balance_includes_today=data.get('balance_includes_today_expenses'))
+    elif action=='cycle_alert':
+        report=cycle_spending_alert(data.get('cycle',{}),current)
     elif action in ('leaks','subscriptions'):
         analysis=money_leaks(rows,current,data.get('subscriptions',[]))
         report=dict(analysis=analysis,simulation=reduction_states(analysis))

@@ -49,8 +49,9 @@ class GoalEngineTests(unittest.TestCase):
         r=goal_metrics(goal(saved_amount='400'),DAY)
         self.assertEqual((r['status'],r['progress'],r['remaining_target_amount']),('FUNDED','100.00','0'))
 
-    def test_missing_savings_and_protected_source_rejected(self):
-        for changes in ({'saved_amount':None},{'funding_source':'emergency'}, {'target_amount':'NaN'}, {'target_amount':'-1'}):
+    def test_unknown_savings_allowed_but_invalid_protected_source_rejected(self):
+        self.assertIsNone(goal_metrics(goal(saved_amount=None),DAY)['saved_amount'])
+        for changes in ({'funding_source':'emergency'}, {'target_amount':'NaN'}, {'target_amount':'-1'}):
             with self.assertRaises(ValueError):goal_metrics(goal(**changes),DAY)
 
     def test_multiple_goals_joint_budget_and_no_mutation(self):
@@ -143,10 +144,12 @@ class GoalStorageTests(unittest.TestCase):
         self.mutate('delete',dict(goal_id=ident),4,'e')
         self.assertEqual(self.store.read()['goals'][0]['status'],'DELETED')
 
-    def test_infeasible_edit_rolls_back(self):
+    def test_infeasible_draft_can_be_edited_without_allocating_funds(self):
         r=self.mutate('create',goal(),0,'a');ident=r['goal']['goal_id']
-        with self.assertRaises(ValueError):self.mutate('edit',dict(goal_id=ident,target_amount='999999'),1,'b')
-        self.assertEqual(self.store.read()['revision'],1)
+        result=self.mutate('edit',dict(goal_id=ident,target_amount='999999'),1,'b')
+        self.assertEqual(result['feasibility'],'NOT_FEASIBLE')
+        self.assertFalse(result['goal']['allocation_enabled'])
+        self.assertEqual(self.store.read()['revision'],2)
 
     def test_preview_does_not_create_store(self):
         r=run(dict(action='preview',goal=goal(),profile=self.p,budget=self.b),self.store,DAY)

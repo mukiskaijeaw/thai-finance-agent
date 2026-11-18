@@ -4,7 +4,7 @@ Python standard library only. Extend existing profile contract; do not migrate t
 
 ## Observed providers
 
-Inspect the selected local provider before use. The adapter accepts exact 14-column and legacy 11-column transaction schemas without merging records; totals are not bank balances. Unknown or unconfirmed profile values remain unknown. Tax worksheets and historical recurring payments are not automatically confirmed payable schedules. Accept future commitments only from confirmed local provider/user data.
+Inspected 2026-11-12: active `thai-finance-agent/database.csv` has the 14 documented transaction columns. Adapter additionally supports the exact 11-column base schema used by the separate finance-agent-kit, without merging records. Both report observed totals, never account balances. `financial_profile.json` is an unversioned zero-filled template: unsupported, not confirmed zero income/cash. Existing tax CSV contains review records and tax estimates, not a confirmed due-date payable schedule. No usable Pillar 5 subscription schedule was found. PROJECT_PLAN.md lists Pillars 2/3/5 as project scope; a plan is not a working data feed. Do not invent connectors or tax liabilities. Accept confirmed schedules from the selected local provider/user only; distinguish historical recurring candidates from confirmed bills.
 
 ## Common request
 

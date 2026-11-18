@@ -75,6 +75,15 @@ class ConversationTests(unittest.TestCase):
         _,d=fixture()
         self.assertEqual(evaluate_decision({},d,today())['decision']['recommendation'],'NEED_MORE_INFO')
 
+    def test_missing_cash_does_not_block_product_or_budget_advice(self):
+        result=recommend({'status':'INSUFFICIENT_DATA','issues':['cash_missing']},{})
+        self.assertEqual(result['recommendation'],'NEED_MORE_INFO')
+        self.assertFalse(result['confirmed_affordability_available'])
+        self.assertTrue(result['product_comparison_allowed'])
+        self.assertTrue(result['budget_guidance_allowed'])
+        self.assertEqual(result['follow_up_questions'],[])
+        self.assertTrue(any('เปรียบเทียบ' in x for x in result['alternative_actions']))
+
     def test_unverified_price_not_buy(self):
         p,d=fixture();d['price_confirmed']=False
         self.assertEqual(evaluate_decision(p,d,today())['decision']['financial_fit'],'INSUFFICIENT_DATA')

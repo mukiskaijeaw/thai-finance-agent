@@ -37,9 +37,9 @@
           <label>ชื่อเป้าหมาย<input name="goal_name" required maxlength="200"></label>
           <label>ประเภท<select name="goal_category"><option value="purchase">ซื้อสินค้า</option><option value="travel">ท่องเที่ยว</option><option value="general">เก็บเงินทั่วไป</option><option value="education">ค่าเรียน</option><option value="future_expense">รายจ่ายอนาคต</option></select></label>
           <label>ยอดเป้าหมาย (บาท)<input name="target_amount" type="number" min="0.01" step="0.01" required></label>
-          <label>เก็บแล้วจริง (บาท)<input name="saved_amount" type="number" min="0" step="0.01" required></label>
+          <label>เก็บแล้วจริง (บาท · ไม่บังคับ)<input name="saved_amount" type="number" min="0" step="0.01"></label>
           <label>วันที่ต้องการ / สิ้นเดือน / สิ้นปี<input name="target_date" required></label>
-          <label>แหล่งเงิน<select name="funding_source"><option value="free_cash">เงินใช้เพิ่ม หลังกันภาระแล้ว</option></select></label>
+          <label>แหล่งเงิน<select name="funding_source"><option value="unallocated">ยังไม่จัดสรรเงิน</option><option value="free_cash">เงินใช้เพิ่ม หลังกันภาระแล้ว</option></select></label>
           <label>ลิงก์ภาพ (ไม่บังคับ)<input name="image_url" type="url"></label>
           <label>ความสำคัญ<select name="priority"><option value="">ยังไม่ระบุ</option><option value="low">ต่ำ</option><option value="normal">ปกติ</option><option value="high">สูง</option></select></label>
         </div>
@@ -71,10 +71,11 @@
       }
       (data.goals||[]).forEach(goal=>{
         const card=make('article','gp-goal');
+        if(goal.simulated_price)card.append(make('p','gp-muted','ยอดเป้าหมายจากราคาจำลอง ไม่ใช่ราคาที่ร้านยืนยันครับ · ยอดออมเริ่มต้นเป็นสมมติฐาน ต้องยืนยันก่อนบันทึก'));
         const heading=make('div','gp-heading');const icon=make('i');icon.setAttribute('data-lucide',icons[goal.goal_category]||'target');icon.setAttribute('aria-hidden','true');heading.append(icon,make('h3','',goal.goal_name));card.append(heading);
         card.append(make('div','gp-big',money(goal.target_amount)),make('div','gp-muted','ยังต้องเก็บ '+money(goal.remaining_target_amount)),make('div','gp-muted','วันที่เป้าหมาย '+goal.target_date+' · '+goal.countdown_text));
-        const track=make('div','gp-track');track.setAttribute('role','progressbar');track.setAttribute('aria-label','ความคืบหน้า '+goal.goal_name);track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',goal.progress);
-        const fill=make('div','gp-fill');fill.style.width=goal.progress+'%';track.append(fill);card.append(track,make('div','gp-muted',money(goal.saved_amount)+' / '+money(goal.target_amount)+' · '+goal.progress+'%'));
+        const track=make('div','gp-track');track.setAttribute('role','progressbar');track.setAttribute('aria-label','ความคืบหน้า '+goal.goal_name);track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
+        const fill=make('div','gp-fill');if(goal.progress!==null&&goal.progress!==undefined){track.setAttribute('aria-valuenow',goal.progress);fill.style.width=goal.progress+'%';}else{track.hidden=true;}track.append(fill);card.append(track,make('div','gp-muted',goal.progress==null?'ยังไม่ทราบยอดที่เก็บแล้ว':money(goal.saved_amount)+' / '+money(goal.target_amount)+' · '+goal.progress+'%'));const fitText=({'FEASIBLE':'แผนเป็นไปได้ตามข้อมูลที่มี','AT_RISK':'แผนตึง ควรระวัง','NOT_FEASIBLE':'งบยังไม่พอสำหรับแผนนี้'})[goal.feasibility];if(fitText)card.append(make('div','gp-muted',fitText));if(goal.allocation_enabled===false)card.append(make('div','gp-muted','ยังไม่ได้จัดสรรเงินจริง'));
         const metrics=make('div','gp-metrics');
         [['ต้องเก็บต่อวัน',goal.daily_saving],['งบใช้ต่อวันหลังจัดสรรทุกเป้าหมาย',data.daily_spending]].forEach(([label,value])=>{const cell=make('div');cell.append(make('div','gp-muted',label),make('div','gp-value',money(value)));metrics.append(cell);});card.append(metrics,make('p','gp-muted',goal.message));
         if(goal.image_url){const link=make('a','gp-muted','ดูภาพเป้าหมายที่ระบุ');link.href=goal.image_url;link.target='_blank';link.rel='noreferrer noopener';card.append(link);}
@@ -89,7 +90,7 @@
         }else{
           const begin=make('button','cursor-interaction','ขอเริ่มแผนนี้');begin.type='button';
           begin.addEventListener('click',()=>{
-            const fields={};['goal_name','goal_category','target_amount','saved_amount','target_date','image_url','priority','funding_source'].forEach(key=>{fields[key]=goal[key]??null;});
+            const fields={};['goal_name','goal_category','target_amount','saved_amount','target_date','image_url','priority','funding_source','simulated_price'].forEach(key=>{fields[key]=goal[key]??null;});
             send('ขอสร้างและเริ่มเป้าหมายนี้ '+JSON.stringify(fields)+' ตรวจผลกระทบและขอยืนยันก่อนบันทึก');
           });actions.append(begin);
         }

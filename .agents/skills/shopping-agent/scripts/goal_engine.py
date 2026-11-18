@@ -10,6 +10,15 @@ CATEGORIES = ('purchase', 'travel', 'general', 'education', 'future_expense')
 ACTIVE = ('ACTIVE',)
 
 
+def feasibility_status(report):
+    status=report.get('status')
+    if status=='NOT_FEASIBLE':return 'NOT_FEASIBLE'
+    if status!='FEASIBLE':return 'UNKNOWN'
+    remaining=report.get('remaining_spending_budget')
+    if remaining is not None and Decimal(str(remaining))<=0:return 'AT_RISK'
+    return 'FEASIBLE'
+
+
 def today_bangkok():
     # Bangkok has no DST. Fixed UTC+7 also works without Windows tzdata.
     return datetime.now(timezone(timedelta(hours=7))).date()
@@ -35,19 +44,21 @@ def target_day(value, current):
 
 def normalize_goal(raw, current):
     g = deepcopy(raw)
+    g.setdefault('goal_category','general')
+    g.setdefault('funding_source','unallocated')
     for key in ('goal_name', 'goal_category', 'funding_source'):
         if not isinstance(g.get(key), str) or not g[key].strip() or len(g[key])>200:
             raise ValueError(key+'_required')
     if g['goal_category'] not in CATEGORIES:
         raise ValueError('invalid_goal_category')
     # Never silently select emergency/protected savings as a funding pool.
-    if g['funding_source'] != 'free_cash':
+    if g['funding_source'] not in ('free_cash','unallocated'):
         raise ValueError('funding_source_requires_confirmed_free_cash')
     g['target_amount'] = str(amount(g.get('target_amount')))
     if amount(g['target_amount']) <= 0:
         raise ValueError('positive_target_required')
     # Missing savings are unknown, not an implicit zero.
-    g['saved_amount'] = str(amount(g.get('saved_amount')))
+    g['saved_amount'] = str(amount(g['saved_amount'])) if g.get('saved_amount') not in (None,'') else None
     g['target_date'] = target_day(g.get('target_date'), current).isoformat()
     if (date.fromisoformat(g['target_date'])-current).days > 3660:
         raise ValueError('target_horizon_exceeds_10_years')
@@ -66,7 +77,14 @@ def normalize_goal(raw, current):
 
 def goal_metrics(raw, current, recorded_today=False):
     g = normalize_goal(raw, current)
-    target, saved = amount(g['target_amount']), amount(g['saved_amount'])
+    target = amount(g['target_amount'])
+    if g['saved_amount'] is None:
+        days=(date.fromisoformat(g['target_date'])-current).days
+        return dict(g,plan_status=g['status'],current_date=current.isoformat(),days_remaining=days,
+                    saving_days_including_today=max(0,days+1),remaining_target_amount=None,
+                    available_saving_days=max(0,days+1-int(recorded_today)),recorded_today=recorded_today,
+                    daily_saving=None,progress=None)
+    saved=amount(g['saved_amount'])
     gap = max(Decimal(0), target-saved)
     days = (date.fromisoformat(g['target_date'])-current).days
     count = max(0, days+1)
@@ -127,6 +145,8 @@ def plan_goals(goals, profile, options, current, forecast=None, coverage=None, r
                 daily_spending=None, calendar=[], forecast=[])
     if b['status']=='INSUFFICIENT_DATA':
         result['issues']=b['issues'];return result
+    if any(g['saved_amount'] is None and g.get('allocation_enabled',True) and g.get('plan_status')=='ACTIVE' for g in all_metrics):
+        result['issues']=['saved_amount_unknown'];return result
     coverage=coverage or {}
     if set(coverage)-set(ids):
         raise ValueError('unknown_coverage_goal')
@@ -134,12 +154,20 @@ def plan_goals(goals, profile, options, current, forecast=None, coverage=None, r
     covered=sum((amount(x) for x in coverage.values()),Decimal(0))
     if covered>reserved:
         raise ValueError('goal_coverage_exceeds_reserved')
-    saved=sum((amount(g['saved_amount']) for g in all_metrics),Decimal(0))
+    excluded=options.get('cash_excluded_goal_savings') or {}
+    if not isinstance(excluded,dict) or set(excluded)-set(ids):raise ValueError('unknown_cash_excluded_goal')
+    saved=sum((amount(g['saved_amount']) for g in all_metrics if g['saved_amount'] is not None),Decimal(0))
     for g in all_metrics:
-        if amount(coverage.get(g['goal_id'],'0'))>amount(g['saved_amount']):
+        if g['saved_amount'] is None and amount(coverage.get(g['goal_id'],'0'))>0:raise ValueError('unknown_saved_coverage')
+        if g['saved_amount'] is not None and amount(coverage.get(g['goal_id'],'0'))>amount(g['saved_amount']):
             raise ValueError('goal_coverage_exceeds_saved')
-    available=Decimal(b['recommended_budget'])-(saved-covered)
-    participating=[g for g in metrics if g.get('status') in ('ACTIVE','DRAFT','OVERDUE','NO_SAVING_DAYS')]
+        outside=amount(excluded.get(g['goal_id'],'0'))
+        if g['saved_amount'] is None and outside>0:raise ValueError('unknown_saved_exclusion')
+        if g['saved_amount'] is not None and outside+amount(coverage.get(g['goal_id'],'0'))>amount(g['saved_amount']):
+            raise ValueError('overlapping_goal_savings_coverage')
+    excluded_total=sum((amount(x) for x in excluded.values()),Decimal(0))
+    available=Decimal(b['recommended_budget'])-(saved-covered-excluded_total)
+    participating=[g for g in metrics if g.get('allocation_enabled',True) and g.get('plan_status')=='ACTIVE' and g.get('status') in ('ACTIVE','OVERDUE','NO_SAVING_DAYS')]
     end=max([date.fromisoformat(b['cycle_end'])]+[date.fromisoformat(g['target_date']) for g in participating])
     events={}
     cycle_end=date.fromisoformat(b['cycle_end'])

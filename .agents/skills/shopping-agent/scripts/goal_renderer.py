@@ -17,7 +17,7 @@ def ui_data(report, demo=False):
         goal=dict(raw)
         goal['countdown_text']=('เลยกำหนดแล้ว' if goal['days_remaining']<0 else f"อีก {goal['days_remaining']} วัน · เก็บได้รวมวันนี้ {goal['saving_days_including_today']} วัน")
         goal['message']=personality(goal,report['status'])
-        if demo:
+        if demo and goal.get('saved_amount') is not None:
             from goal_engine import demo_progress_states
             from datetime import date
             goal['demo_progress']=demo_progress_states(goal,date.fromisoformat(report['current_date']))
@@ -29,7 +29,7 @@ def ui_data(report, demo=False):
     if not detail:detail='กันภาระและเป้าหมายอื่นร่วมกันแล้ว' if report['status']=='FEASIBLE' else 'ตรวจหรือระบุข้อมูลเป้าหมายก่อนเริ่มแผน'
     return dict(goals=goals,current_date=report['current_date'],daily_spending=report.get('daily_spending'),
                 calendar=report.get('calendar',{}),demo=demo,
-                summary='สถานะแผนรวม: '+report['status']+' · '+detail)
+                summary='สถานะแผนรวม: '+{'FEASIBLE':'เป็นไปได้','NOT_FEASIBLE':'ยังไม่เพียงพอ','INSUFFICIENT_DATA':'ข้อมูลไม่เพียงพอ'}.get(report['status'],'ยังประเมินไม่ได้')+' · '+detail)
 
 
 def render_inline(report, demo=False):
@@ -45,6 +45,10 @@ def render_markdown(report):
     lines=['**Goal Planner — '+report['status']+'**','', '| เป้าหมาย | ยอดเป้าหมาย | วันที่ | เก็บ/วัน | ความคืบหน้า |','|---|---:|---|---:|---:|']
     for g in report.get('goals',[]):
         name=g['goal_name'].replace('|','\\|').replace('\n',' ')
-        lines.append(f"| {name} | {g['target_amount']} | {g['target_date']} | {g['daily_saving'] or 'ยังประเมินไม่ได้'} | {g['progress']}% |")
+        progress='ยังไม่ทราบ' if g['progress'] is None else str(g['progress'])+'%'
+        lines.append(f"| {name} | {g['target_amount']} | {g['target_date']} | {g['daily_saving'] or 'ยังประเมินไม่ได้'} | {progress} |")
+        allocation='ยังไม่จัดสรรเงินจริง' if g.get('allocation_enabled') is False else 'มีแผนจัดสรร'
+        if g.get('feasibility') not in (None,'UNKNOWN'):
+            lines.append(f"| ↳ ความเป็นไปได้ | {g['feasibility']} | {allocation} | | |")
     lines+=['','งบใช้ต่อวัน: '+str(report.get('daily_spending') or 'ยังประเมินไม่ได้')]
     return '\n'.join(lines)

@@ -14,7 +14,7 @@ PNG is a visual image in chat, not an interactive native widget. Light/dark are 
 
 ## Dependencies and local execution
 
-Optional PNG rendering needs Pillow in a local Python environment (`python -m pip install Pillow`). Core calculations and the dashboard use only the standard library. Supply appropriate Thai fonts for your platform.
+Optional `Pillow==13.0.0` can be installed in an isolated virtual environment.
 
 Core shopping commands do not import Pillow and retain their existing dependency-free behavior. Windows font files: tahoma.ttf and tahomabd.ttf. The Windows wheel does not expose RAQM; renderer uses Unicode DrawTextW through local Windows GDI to shape Thai, then Pillow composites the glyph mask. No font uploads or downloads, no network during rendering. Platforms without Windows need RAQM and supplied matching Thai fonts; they fail clearly instead of silently rendering broken Thai.
 

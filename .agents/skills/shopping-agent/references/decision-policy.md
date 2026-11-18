@@ -9,7 +9,7 @@ Codex extracts intent and relevant sourced context; Python calculates and applie
 | User intent | Local tools / behavior |
 |---|---|
 | Price/specification only | Product search, images only if requested; no financial source read |
-| Bare product / purchase desire | Follow workspace-authorized local provider connection; clarify meaningful variant/purpose, then financial assessment |
+| Bare product / purchase desire | Read the authorized local context, offer sourced product alternatives and conditional budget guidance first; clarify variant/size only when needed for an exact listing or checkout |
 | Should I buy / replace broken item / promotion | Cycle-aware fit + decision policy; offer relevant alternatives |
 | Overspending / biggest category this month | Finance workflow in selected Pillar 1; deterministic observed totals, not a shopping search; incomplete transaction history does not prove a complete monthly budget |
 | Remaining cash / travel / saving for next year | Existing budget, future obligations, goals or what-if as appropriate; never suggest a product merely to spend remaining cash |
@@ -46,7 +46,7 @@ The selected provider is already recorded in workspace AGENTS.md. Do not ask for
 }
 ```
 
-This is an input shape, not a financial example; profile/budget require confirmed fields from the existing planning contract. A price must be a verified effective price (with eligible discounts and shipping) or user-confirmed final total. A partial estimate cannot be marked confirmed. Codex prepares the request; users do not fill JSON. JSON stdout is the default. Markdown is the accessibility fallback. Primary chosen presentation is PNG via decision_renderer.py.
+This is an input shape, not a financial example; profile/budget require confirmed fields from the existing planning contract. A price must be a verified effective price (with eligible discounts and shipping) or user-confirmed final total. A partial estimate cannot be marked confirmed. Codex prepares the request; users do not fill JSON. JSON stdout is the default. Use concise chat text or Markdown by default; use existing visual tools only when useful and supported.
 
 Facts use `{value,source}`. Unknown or unsourced facts remain unknown. necessity: required/wanted/not_needed; timing: urgent/flexible. Booleans: value_suitable, planned, promotion, prefer_skip, current_usable, repair_possible, borrow_possible, secondhand_acceptable, offer_ready. Do not fill absent facts with false to manufacture confidence. No percentage score is used. `offer_ready` includes variant match and stock, not just a positive engine balance.
 
@@ -57,7 +57,7 @@ Alternatives are `{id,action,price,price_confirmed,price_source,suitable:{value:
 ## Policy v1 priority
 
 1. Explicit preference to skip -> SKIP_PURCHASE, without suggesting products to spend the money.
-2. Missing financial fit/verified total -> NEED_MORE_INFO, never a buy verdict.
+2. Missing financial fit/verified total -> NEED_MORE_INFO for confirmed purchase affordability only; continue product comparison and conditional budget guidance without demanding a cash balance first.
 3. Missing sourced purpose/necessity -> NEED_MORE_INFO, targeted question.
 4. Known unsuitable item -> CHOOSE_ALTERNATIVE only if a suitable affordable alternative exists, otherwise NEED_MORE_INFO.
 5. SAVE_FIRST / NOT_AFFORDABLE -> CHOOSE_ALTERNATIVE when user urgency and verified feasible alternative exist; otherwise WAIT_AND_SAVE. No ETA if engine cannot establish one; in that case review obligations first.
@@ -69,7 +69,7 @@ Promotion adds a reminder about actual cash outlay, never an urgency prompt. The
 
 ## Visual response and privacy
 
-The user selected option A, graphic PNG cards, without product photographs. Use local Pillow renderer decision_renderer.py after evaluating. Place recommendation first, separate Financial Fit line, then price/available/gap/monthly surplus, timeline/progress, reasons, relevant next action. Mark DEMO or hypothetical data visibly. Use a concise accompanying sentence for questions/alternatives not visible in the card. Large lists of product offers are secondary and appear only when needed. Product options, additional discounts and shipping stay consistent; links are in accompanying chat text because PNG is not clickable. No HTML/CSS/JavaScript/frontend/server.
+Present the recommendation first, with relevant financial fit, price, available funds, timeline and limitations when known. Clearly mark estimates and hypothetical assumptions. A missing verified fit prevents a definitive buy verdict, but does not prevent conditional guidance or a preliminary savings plan. Use existing visual cards only when useful and supported; otherwise respond in concise chat text or Markdown. No new frontend or server.
 
 The original financial-fit renderer remains available. This upgrade adds a personal decision card; it does not pretend that all seven other planned visual renderers are implemented. The application theme is not detected; choose light/dark explicitly. Rendering failures do not trigger website creation; use the textual accessibility fallback and state the limitation.
 

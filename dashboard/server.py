@@ -74,7 +74,7 @@ class Dashboard:
         target=target_day(payload.get('target_date') or 'สิ้นเดือน',current)
         goal=dict(goal_name=name,goal_category='purchase',target_amount=str(total),saved_amount='0',target_date=target.isoformat(),funding_source='free_cash')
         report=goal_run(dict(data,action='preview',goal=goal),self.store,current) if total>0 else None
-        scenario=dict(available_spending=available,quote=dict(effective=str(total)),decision=dict(recommendation='NEED_MORE_INFO'))
+        scenario=dict(available_spending=available,portfolio=portfolio,quote=dict(effective=str(total)),decision=dict(recommendation='NEED_MORE_INFO'))
         return dict(name=name,total=str(total),shipping=str(shipping),price_type='USER_ESTIMATE',financial=financial,
             available=available,remaining=str(Decimal(available)-total) if available is not None else None,
             simulation=price_states(scenario,current),goal=goal,plan=report,
@@ -85,6 +85,7 @@ class Dashboard:
         if action not in ('create','record_savings','pause','activate','delete','edit'):raise ValueError('unsupported_action')
         goal=deepcopy(payload['goal']);snapshot=self.store.read()
         if action=='create':
+            if goal.get('simulated_price')=='true':goal['simulated_price']=True
             goal['activate_on_create']=True
             report=goal_run(dict(data,action='preview',goal=goal),self.store,current)
         else:

@@ -3,7 +3,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from goal_engine import today_bangkok, plan_goals, goal_metrics, calendar_rows
+from goal_engine import today_bangkok, plan_goals, goal_metrics, calendar_rows, feasibility_status
 from goal_storage import GoalStore
 
 
@@ -21,9 +21,13 @@ def run(request, store, current=None, consent=False):
     if action in ('preview','view'):
         goals=snapshot['goals']
         if action=='preview':
-            candidate=dict(request['goal'],status='DRAFT',goal_id=request['goal'].get('goal_id') or 'preview')
+            candidate=dict(request['goal'],status='ACTIVE',allocation_enabled=True,goal_id=request['goal'].get('goal_id') or 'preview')
             goals=[g for g in goals if g['goal_id']!=candidate['goal_id']]+[candidate]
         report=evaluate(goals)
+        for metric in report['goals']:
+            hypothetical=[dict(g,allocation_enabled=True) if g['goal_id']==metric['goal_id'] else g for g in goals]
+            assessed=evaluate(hypothetical)
+            metric['feasibility']=feasibility_status(assessed)
         report['revision']=snapshot['revision']
         report['calendar']={g['goal_id']:calendar_rows(goal_metrics(g,current),current,
                             [e for e in snapshot['entries'] if e['goal_id']==g['goal_id']])

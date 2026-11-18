@@ -38,9 +38,9 @@ def recommend(financial, context, alternatives=None):
         reasons.append('คุณระบุว่าต้องการเก็บเงินไว้ จึงไม่จำเป็นต้องค้นสินค้าหรือซื้อเพิ่ม')
     elif fit not in ('AFFORDABLE', 'SAVE_FIRST', 'NOT_AFFORDABLE'):
         final = 'NEED_MORE_INFO'
-        reasons.append('ข้อมูลการเงินหรือราคาสุทธิยังไม่ครบ จึงยังไม่ตัดสินว่าควรซื้อ')
+        reasons.append('ยังยืนยันความสามารถซื้อไม่ได้ แต่ยังเปรียบเทียบสินค้าและเสนอช่วงงบเบื้องต้นตามข้อมูลที่มีได้')
         missing.extend(financial.get('issues') or ['financial_fit_required'])
-        questions.append('ขอยืนยันเฉพาะข้อมูลการเงินหรือราคาสุทธิที่ยังขาดก่อนนะครับ')
+        actions.append('เปรียบเทียบตัวเลือกที่มีหลักฐาน พร้อมระบุข้อจำกัดของงบประมาณ')
     elif facts['necessity'] not in ('required', 'wanted', 'not_needed') or not isinstance(facts['purpose'], str) or not facts['purpose'].strip():
         final = 'NEED_MORE_INFO'
         reasons.append('ซื้อไหวกับควรซื้อเป็นคนละเรื่อง ยังไม่ทราบวัตถุประสงค์ที่อาจเปลี่ยนคำแนะนำ')
@@ -88,6 +88,9 @@ def recommend(financial, context, alternatives=None):
     return {'policy_version': POLICY_VERSION, 'financial_fit': fit, 'recommendation': final,
             'label': LABELS[final], 'reasons': reasons, 'alternative_actions': list(dict.fromkeys(actions)),
             'verified_alternatives': viable, 'follow_up_questions': questions[:1], 'missing': missing,
+            'product_comparison_allowed': facts['prefer_skip'] is not True,
+            'budget_guidance_allowed': facts['prefer_skip'] is not True,
+            'confirmed_affordability_available': fit in ('AFFORDABLE','SAVE_FIRST','NOT_AFFORDABLE'),
             'assessment': {'affordability': fit,
                            'necessity': facts['necessity'] if facts['necessity'] in ('required','wanted','not_needed') else 'unknown',
                            'purpose': facts['purpose'], 'value': facts['value_suitable'], 'timing': facts['timing'],

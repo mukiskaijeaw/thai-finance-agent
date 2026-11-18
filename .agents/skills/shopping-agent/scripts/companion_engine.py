@@ -14,6 +14,28 @@ D=Decimal
 def floor_money(n):return n.quantize(D('.01'),rounding=ROUND_DOWN)
 
 
+def cycle_spending_alert(request, current):
+    """Compare confirmed cycle spending against an explicitly allocated budget."""
+    result={'status':'INSUFFICIENT_DATA','current_date':current.isoformat()}
+    if request.get('spending_complete') is not True:
+        result['reason']='spending_history_not_confirmed_complete';return result
+    try:
+        start=date.fromisoformat(request['cycle_start']);end=date.fromisoformat(request['next_income_date'])
+        if not start<=current<end:raise ValueError('date_outside_cycle')
+        budget=amount(request['spending_budget']);spent=amount(request['spent_to_date'])
+        days=(end-start).days; elapsed=(current-start).days+1; remaining_days=(end-current).days
+    except (KeyError,TypeError,ValueError):
+        result['reason']='missing_or_invalid_cycle_data';return result
+    remaining=budget-spent
+    planned=budget*D(elapsed)/D(days)
+    status='EXCEEDED' if remaining<0 else 'EXHAUSTED' if remaining==0 else 'AT_RISK' if spent>planned else 'ON_TRACK'
+    return dict(status=status,cycle_start=start.isoformat(),next_income_date=end.isoformat(),
+                budget=str(budget),spent=str(spent),remaining=str(remaining),
+                remaining_days=remaining_days,expected_spending_to_date=str(floor_money(planned)),
+                daily_remaining=str(floor_money(max(D(0),remaining)/remaining_days)),
+                assumption='Even daily spending pace; excludes future obligations unless included in the budget.')
+
+
 def normalize_transactions(rows,current):
     found=[];ids=set();issues=[]
     for row in rows:
@@ -33,14 +55,19 @@ def normalize_transactions(rows,current):
 def daily_spending(shared,rows,current,*,balance_includes_today=None,extra='0'):
     portfolio=shared['portfolio'];rows,issues=normalize_transactions(rows,current)
     spent=sum((amount(r['amount_thb']) for r in rows if r['date']==current.isoformat() and r['transaction_type']=='expense'),D(0))
-    end=current.replace(day=monthrange(current.year,current.month)[1]);days=(end-current).days
-    result=dict(kind='daily',current_date=current.isoformat(),days_remaining=days,saving_days=days+1,
+    result=dict(kind='daily',current_date=current.isoformat(),days_remaining=None,saving_days=None,cycle_end=None,
                 today_recorded=str(spent),status='INSUFFICIENT_DATA',issues=issues,
                 today_budget=None,today_remaining=None,available_month=None,tomorrow_daily=None,spending_progress=None)
     if balance_includes_today is not True:
         result['issues']+=['confirm_balance_includes_today_expenses'];return result
     if portfolio['status']=='INSUFFICIENT_DATA':result['issues']+=portfolio['issues'];return result
     if issues: return result
+    try:
+        end=date.fromisoformat(portfolio['budget']['cycle_end']);days=(end-current).days
+        if days<0: raise ValueError('past_cycle')
+    except (KeyError,TypeError,ValueError):
+        result['issues'].append('income_cycle_missing_or_invalid');return result
+    result.update(days_remaining=days,saving_days=days+1,cycle_end=end.isoformat())
     available=D(portfolio['remaining_spending_budget'])
     # Current balance already reflects today's confirmed expenses; never subtract twice.
     before_today=available+spent
@@ -57,9 +84,9 @@ def daily_spending(shared,rows,current,*,balance_includes_today=None,extra='0'):
             adjusted['cash']=str(cash)
             changed=build_shared(adjusted,shared['budget_options'],shared['snapshot'],current,shared.get('forecast'),shared.get('coverage'))
             if changed['portfolio']['status']!='FEASIBLE':status='INSUFFICIENT_FUNDS'
-    message='วันนี้ยังอยู่ในงบครับ ใช้ได้ แต่อย่าเพิ่งใช้ชีวิตเหมือนเงินเดือนออก'
-    if status=='CAUTION':message='เกินงบวันนี้ไป '+str(-today_left)+' บาทครับ วันต่อไปต้องเบาลงหน่อย'
-    if status=='INSUFFICIENT_FUNDS':message='ยอดนี้กระทบเงินที่ต้องกันไว้ครับ ลองลดรายจ่ายหรือทบทวนแผนก่อน'
+    message='วันนี้ยังอยู่ในงบครับ ใช้ได้ แต่อย่าเพิ่งใช้ชีวิตเหมือนเงินเดือนออกนะครับ'
+    if status=='CAUTION':message='เกินงบวันนี้ไป '+str(-today_left)+' บาทครับ วันต่อไปต้องเบาลงหน่อยนะครับ'
+    if status=='INSUFFICIENT_FUNDS':message='ยอดนี้กระทบเงินที่ต้องกันไว้ครับ ลองลดรายจ่ายหรือทบทวนแผนก่อนนะครับ'
     commitments=D(portfolio['budget']['recommended_budget'])-available
     result.update(status=status,today_budget=str(today_budget),today_remaining=str(today_left),
                   available_month=str(remaining),tomorrow_daily=str(tomorrow) if tomorrow is not None else None,
@@ -254,7 +281,6 @@ def travel_states(shared,raw,current):
         report=cache[total]
         # Widths depend on composition, while affordability depends on the total.
         widths=[str((D(v)/total*100).quantize(D('.1'))) if total else '0' for v in values]
-        states[','.join(map(str,indexes))]=dict(total=str(total),distribution=widths,
-                financial_fit=report['financial_fit'],goal_status=report['goal_status'],
-                required_savings=report['required_savings'],daily_saving=report['daily_saving'],daily_spending=report['daily_spending'])
-    return dict(initial=initial,controls=controls,states=states)
+        states[','.join(map(str,indexes))]=dict(total=str(total),distribution=widths)
+    totals={str(total):dict(financial_fit=report['financial_fit'],goal_status=report['goal_status'],required_savings=report['required_savings'],daily_saving=report['daily_saving'],daily_spending=report['daily_spending']) for total,report in cache.items()}
+    return dict(initial=initial,controls=controls,states=states,totals=totals)

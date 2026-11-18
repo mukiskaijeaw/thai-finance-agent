@@ -94,11 +94,37 @@ def evaluate_purchase(session, request, saved_goals, entries, current):
               target_date=target.isoformat(),quote=quote,financial=None,goal_plan=None,
               available_spending=None,remaining_after_purchase=None,existing_goal_commitments=None,
               suggested_purchase_date=None,daily_saving=None,daily_spending=None)
-    profile=request.get('profile',{});options=deepcopy(request.get('budget',{}))
+    if request.get('financial_context') is not None or 'transactions' in request:
+        from shared_state import financial_context_fallback
+        advisory=dict(request.get('financial_context') or {})
+        advisory.setdefault('goals',saved_goals)
+        advisory.setdefault('profile',request.get('profile') or {})
+        advisory.setdefault('budget',request.get('budget') or {})
+        base['advisory_context']=financial_context_fallback(request.get('transactions',[]),current,advisory)
+    profile=deepcopy(request.get('profile',{}));options=deepcopy(request.get('budget',{}))
+    linked=[g for g in saved_goals if g.get('product_ref')==product['id'] and g.get('status')!='DELETED']
+    if len(linked)>1:raise ValueError('multiple_linked_goals_require_review')
+    effective_goals=saved_goals;coverage=deepcopy(request.get('coverage') or {})
+    if linked and request.get('use_linked_goal_savings') is True:
+        g=linked[0]
+        if request.get('goal_savings_in_current_cash') is not True or g.get('saved_amount') is None:
+            raise ValueError('confirm_linked_goal_savings_in_current_cash')
+        excluded=deepcopy(options.get('cash_excluded_goal_savings') or {})
+        if amount(excluded.pop(g['goal_id'],'0'))>0:
+            raise ValueError('linked_goal_savings_excluded_from_current_cash')
+        if 'cash_excluded_goal_savings' in options:options['cash_excluded_goal_savings']=excluded
+        # Releasing the linked goal is a scenario only. Amount already protected in
+        # reserved is released once; other goals and their coverage remain protected.
+        covered=amount(coverage.pop(g['goal_id'],'0'))
+        if covered>amount(g['saved_amount']) or covered>amount(profile.get('reserved')):
+            raise ValueError('invalid_linked_goal_coverage')
+        profile['reserved']=str(amount(profile['reserved'])-covered)
+        effective_goals=[x for x in saved_goals if x.get('goal_id')!=g['goal_id']]
+        base['linked_goal_savings_used']=g['saved_amount']
     if session.get('intent',{}).get('budget') not in (None,''):
         options.setdefault('user_budget',session['intent']['budget'])
     recorded={e['goal_id'] for e in entries if e['date']==current.isoformat()}
-    portfolio=plan_goals(saved_goals,profile,options,current,relevant_forecast(saved_goals,options,current,request.get('forecast')),request.get('coverage'),recorded)
+    portfolio=plan_goals(effective_goals,profile,options,current,relevant_forecast(effective_goals,options,current,request.get('forecast')),coverage,recorded)
     base['portfolio']=portfolio
     if portfolio['status']=='FEASIBLE':
         available=Decimal(portfolio['remaining_spending_budget'])
@@ -135,14 +161,14 @@ def evaluate_purchase(session, request, saved_goals, entries, current):
     if quote['effective'] is not None and Decimal(quote['effective'])>0:
         # Zero here belongs to an UNSAVED new-plan scenario, never an inferred real balance.
         saved=request.get('purchase_saved_amount','0')
-        linked=[g for g in saved_goals if g.get('product_ref')==product['id'] and g.get('status')!='DELETED']
         goal=dict(goal_id='purchase-preview',goal_name=product['name'],goal_category='purchase',
                   target_amount=quote['effective'],saved_amount=saved,target_date=target.isoformat(),
                   image_url=product.get('image_url'),funding_source='free_cash',status='DRAFT',
                   product_ref=product['id'],product_url=product['source'])
         if linked:
             goal=dict(linked[0],target_amount=quote['effective'],target_date=target.isoformat())
-        proposed=[g for g in saved_goals if g.get('goal_id')!=goal['goal_id']]+[goal]
+        # Preview the effect of starting the plan without changing the saved draft.
+        proposed=[g for g in saved_goals if g.get('goal_id')!=goal['goal_id']]+[dict(goal,status='ACTIVE',allocation_enabled=True)]
         plan=plan_goals(proposed,profile,options,current,relevant_forecast(proposed,options,current,request.get('forecast')),request.get('coverage'),recorded)
         metric=next(g for g in plan['goals'] if g['goal_id']==goal['goal_id'])
         base.update(goal_plan=plan,goal_draft=goal,daily_saving=metric['daily_saving'],
@@ -164,9 +190,12 @@ def price_states(report, current):
     actual=report['quote'].get('effective') or report['quote'].get('estimate')
     if actual is None:return None
     actual=Decimal(actual);ceiling=max(actual*2,max(Decimal(0),available)*Decimal('1.25'))
-    from calendar import monthrange
     from decimal import ROUND_DOWN
-    days=monthrange(current.year,current.month)[1]-current.day+1
+    try:
+        cycle=report.get('portfolio',{}).get('budget',{}).get('cycle_end')
+        days=(date.fromisoformat(cycle)-current).days+1
+        if days<=0:return None
+    except (TypeError,ValueError):return None
     values=sorted(set([(ceiling*i/100).quantize(Decimal('.01')) for i in range(101)]+[actual]))
     states=[]
     for price in values:
@@ -192,6 +221,19 @@ def run_purchase(payload, store, current, consent=False):
     if action=='cheaper':return dict(session,stage='SEARCH_REQUIRED',search_reason='cheaper_same_selected_product')
     if action=='skip':
         return dict(session,stage='SKIPPED',recommendation='SKIP_PURCHASE')
+    if action=='simulation_goal':
+        if session.get('selection_confirmed') is not True or not session.get('selected_product'):
+            raise ValueError('confirm_product_before_financial_assessment')
+        product=session['selected_product'];value=amount(payload['simulated_price'])
+        if value<=0:raise ValueError('positive_target_required')
+        target=target_day(payload.get('target_date') or 'สิ้นเดือน',current)
+        if target<current:raise ValueError('purchase_target_is_in_the_past')
+        goal=dict(goal_name=product['name'],goal_category='purchase',target_amount=str(value),saved_amount='0',target_date=target.isoformat(),funding_source='free_cash',simulated_price=True)
+        from goal_planner import run as run_goal
+        snapshot=store.read();goals=snapshot['goals']+[dict(goal,status='DRAFT')]
+        forecast=relevant_forecast(goals,payload.get('budget',{}),current,payload.get('forecast'))
+        view=run_goal(dict(action='preview',goal=goal,profile=payload.get('profile',{}),budget=payload.get('budget',{}),forecast=forecast,coverage=payload.get('coverage')),store,current)
+        return dict(session,goal_view=view,stage='SIMULATION_GOAL_PREVIEW')
     if action=='select_and_evaluate':
         session=select(session,payload['product_id'],payload.get('confirmed'))
     if action in ('evaluate','change_date','buy_today','goal_preview','select_and_evaluate','start_goal','confirm_goal'):
@@ -207,22 +249,25 @@ def run_purchase(payload, store, current, consent=False):
         result['reviewed_purchase_saved_amount']=payload.get('purchase_saved_amount')
         if action=='confirm_goal':
             if consent is not True:raise ValueError('explicit_goal_confirmation_required')
-            if 'purchase_saved_amount' not in payload or payload.get('funding_source_confirmed') is not True:
-                raise ValueError('confirm_actual_saved_amount_and_free_cash_source')
             if payload.get('review_token')!=review:
                 raise ValueError('review_updated_goal_and_budget_before_confirmation')
             if result.get('linked_goal_id'):raise ValueError('use_existing_linked_goal_no_duplicate_creation')
-            if not result.get('goal_plan') or result['goal_plan']['status']!='FEASIBLE':
-                raise ValueError('goal_plan_not_feasible_or_incomplete')
+            if not result.get('goal_draft'):
+                raise ValueError('goal_requires_confirmed_target_amount')
             from goal_planner import run as run_goal
             goal=dict(result['goal_draft'],activate_on_create=True)
+            # A preview's zero-saving scenario is not an actual savings balance.
+            if 'purchase_saved_amount' not in payload:
+                goal['saved_amount']=None
+            goal['funding_source']='unallocated'
             # Existing GoalStore validates again inside its revision-controlled transaction.
-            forecast=relevant_forecast(snapshot['goals']+[goal],payload['budget'],current,payload.get('forecast'))
-            saved=run_goal(dict(action='create',goal=goal,profile=payload['profile'],budget=payload['budget'],
+            profile=payload.get('profile') or {}; budget=payload.get('budget') or {}
+            forecast=relevant_forecast(snapshot['goals']+[goal],budget,current,payload.get('forecast'))
+            saved=run_goal(dict(action='create',goal=goal,profile=profile,budget=budget,
                                forecast=forecast,coverage=payload.get('coverage'),
                                expected_revision=payload.get('expected_revision'),operation_id=payload.get('operation_id')),
                           store,current,consent=True)
-            view=run_goal(dict(action='view',profile=payload['profile'],budget=payload['budget'],
+            view=run_goal(dict(action='view',profile=profile,budget=budget,
                               forecast=forecast,coverage=payload.get('coverage'),goal_id=saved['goal']['goal_id']),store,current)
             return dict(session,goal_saved=saved,goal_view=view,stage='GOAL_ACTIVE')
         if action in ('start_goal','goal_preview'):result['goal_confirmation_required']=True

@@ -41,10 +41,25 @@
       const state=data.session;let busy=false;
       const make=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;};
       const money=value=>value===null||value===undefined?'ยังไม่ยืนยัน':'฿'+Number(value).toLocaleString('th-TH',{maximumFractionDigits:2});
+      const statusText=value=>({AFFORDABLE:'อยู่ในงบ',SAVE_FIRST:'เก็บเงินก่อน',NOT_AFFORDABLE:'ยังไม่ไหว',INSUFFICIENT_DATA:'ข้อมูลไม่เพียงพอ',BUY_NOW:'ซื้อได้ตามแผน',BUY_WITH_CAUTION:'ซื้อด้วยความระมัดระวัง',WAIT_AND_SAVE:'รอเก็บเงินก่อน',CHOOSE_ALTERNATIVE:'พิจารณาทางเลือกอื่น',SKIP_PURCHASE:'พักการซื้อ',NEED_MORE_INFO:'ต้องการข้อมูลเพิ่ม',WITHIN_AVAILABLE_BUDGET:'อยู่ในงบที่จัดสรร',FEASIBLE:'แผนเป็นไปได้',NOT_FEASIBLE:'แผนยังไม่เพียงพอ',NOT_REQUIRED:'ไม่ต้องตั้งแผน'})[value]||'ยังประเมินไม่ได้';
       root.querySelector('[data-role="mode"]').textContent='SHOPPING AGENT'+(data.demo?' · DEMO':'');
       async function send(action,extra={}){
         if(busy)return;
-        const prompt='Shopping purchase flow: '+JSON.stringify({action,session:state,...extra})+' ใช้ฟังก์ชันในเครื่อง ตรวจข้อมูลและขอยืนยันก่อนบันทึกเป้าหมาย ไม่ซื้อหรือโอนเงิน';
+        const product=state.selected_product?.name||data.report?.product?.name||state.intent?.product||'สินค้านี้';
+        const messages={
+          identify:'ช่วยค้นหาและประเมิน '+(extra.intent?.product||'สินค้าที่ระบุ')+(extra.intent?.budget?' ในงบ '+extra.intent.budget+' บาท':''),
+          select_and_evaluate:'ใช่ครับ เลือก '+product+' ช่วยประเมินการซื้อให้หน่อย',
+          reject:'ยังไม่ใช่รุ่นที่ต้องการ ช่วยถามรายละเอียดเพิ่มเติมหน่อยครับ',
+          search_again:'ช่วยค้นหาตัวเลือกอื่นสำหรับ '+product+' อีกครั้งครับ',
+          change_date:'ช่วยคำนวณแผนซื้อ '+product+' ใหม่สำหรับวันที่ '+extra.target_date+' ครับ',
+          start_goal:'ช่วยตรวจแผนเก็บเงินซื้อ '+product+(extra.simulated_price!==undefined?' โดยใช้ยอดราคาจำลอง '+extra.simulated_price+' บาท ซึ่งไม่ใช่ราคาที่ร้านยืนยัน':'')+(extra.target_date?' ภายในวันที่ '+extra.target_date:'')+(extra.purchase_saved_amount!==undefined?' โดยเก็บไว้แล้ว '+extra.purchase_saved_amount+' บาท':'')+' ก่อนบันทึกครับ',
+          confirm_goal:'ช่วยตรวจและยืนยันแผนเก็บเงินซื้อ '+product+' อีกครั้งก่อนบันทึกครับ',
+          buy_today:'ถ้าซื้อ '+product+' วันนี้จะกระทบงบอย่างไรครับ',
+          cheaper:'ช่วยหาราคาที่ถูกกว่าสำหรับ '+product+' ครับ',
+          change_product:'อยากเปลี่ยนสินค้าที่กำลังพิจารณาครับ',
+          skip:'ยังไม่ซื้อสินค้าชิ้นนี้ครับ'
+        };
+        const prompt=messages[action]||'ช่วยดูแผนซื้อสินค้าต่อให้หน่อยครับ';
         if(!window.openai?.sendFollowUpMessage){feedback.textContent='พิมพ์ในแชท: '+prompt;return;}
         busy=true;
         try{await window.openai.sendFollowUpMessage({prompt,title:'ช่วยดูให้หน่อยว่าควรซื้อไหม'});feedback.textContent='ส่งคำขอแล้ว ยังไม่มีการซื้อหรือบันทึกเป้าหมาย';}
@@ -99,16 +114,17 @@
         content.append(make('div','pf-price',money(r.quote.effective??r.quote.estimate)));
         if(r.quote.effective===null)content.append(make('div','pf-muted','ราคาสินค้า / ประมาณการ ยังไม่ใช่ยอดรวมที่ยืนยันแล้ว'));
         content.append(make('div','pf-status',r.decision.recommendation+' · '+r.decision.label),make('div','pf-muted','Financial Fit: '+r.financial.status));
+        let chosenPrice=null;
         if(data.price_simulation){
           const sim=data.price_simulation,box=make('section'),label=make('label','','จำลองยอดจ่ายรวม'),slider=make('input');slider.type='range';slider.min='0';slider.max=String(sim.states.length-1);slider.step='1';slider.value=String(sim.initial);label.append(slider);
           const value=make('div','pf-value'),detail=make('div','pf-muted'),track=make('div','pf-progress'),fill=make('div','pf-progress-fill');track.append(fill);track.setAttribute('aria-label','สัดส่วนเงินพร้อมใช้ที่จ่าย');track.setAttribute('role','progressbar');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');detail.setAttribute('aria-live','polite');
-          function update(){const state=sim.states[Number(slider.value)];value.textContent=money(state.price);detail.textContent='เหลือ '+money(state.remaining)+' · ใช้ต่อวัน '+money(state.daily_spending)+' · '+state.status;fill.style.width=state.used_percent+'%';track.setAttribute('aria-valuenow',state.used_percent);}
+          function update(){const state=sim.states[Number(slider.value)];chosenPrice=state.price;value.textContent=money(state.price);detail.textContent='เหลือ '+money(state.remaining)+' · ใช้ต่อวัน '+money(state.daily_spending)+' · '+state.status;fill.style.width=state.used_percent+'%';track.setAttribute('aria-valuenow',state.used_percent);}
           slider.addEventListener('input',update);update();box.append(label,value,track,detail,make('p','pf-muted',sim.notice));content.append(box);
         }
         const metrics=make('div','pf-metrics');
         [['เงินพร้อมใช้หลังกันเป้าหมายเดิม',r.available_spending],['เงินเหลือหากซื้อวันนี้',r.remaining_after_purchase],['ภาระเป้าหมายเดิมที่กันเพิ่ม',r.existing_goal_commitments],['ต้องเก็บต่อวันในแผนใหม่',r.daily_saving],['งบใช้ต่อวันหลังเริ่มแผน',r.daily_spending]].forEach(([label,value])=>{const cell=make('div');cell.append(make('div','pf-muted',label),make('div','pf-value',money(value)));metrics.append(cell);});content.append(metrics);
         content.append(make('div','pf-muted','วันที่ซื้อที่แผนรองรับ: '+(r.suggested_purchase_date||'ยังประเมินไม่ได้')));
-        content.append(make('div','pf-muted','แผนเก็บตามวันที่เลือก: '+(r.goal_status||'ยังประเมินไม่ได้')));
+        content.append(make('div','pf-muted','แผนเก็บตามวันที่เลือก: '+statusText(r.goal_status)));
         if(r.goal_issues?.includes('complete_future_cashflow_required'))content.append(make('div','pf-muted','ต้องยืนยันรายรับและภาระอนาคตจนถึงวันเป้าหมายก่อน'));
         if(r.savings_progress!==null&&r.savings_progress!==undefined){
           const progress=make('div','pf-progress');progress.setAttribute('role','progressbar');progress.setAttribute('aria-label','ความคืบหน้าของแผนเก็บเงิน');progress.setAttribute('aria-valuemin','0');progress.setAttribute('aria-valuemax','100');progress.setAttribute('aria-valuenow',r.savings_progress);
@@ -132,7 +148,9 @@
             const operation=globalThis.crypto?.randomUUID?.();
             send('confirm_goal',{target_date:r.target_date,purchase_saved_amount:saved.value,funding_source_confirmed:true,expected_revision:data.revision,operation_id:operation||null,review_token:r.review_token});
           });actions.append(confirm);
-        }else if(r.quote.effective!==null&&r.goal_status!=='NOT_REQUIRED')button(actions,'วางแผนซื้อของชิ้นนี้','start_goal',{target_date:r.target_date});
+        }else if(r.quote.effective!==null&&r.goal_status!=='NOT_REQUIRED'){
+          const start=make('button','cursor-interaction','วางแผนซื้อของชิ้นนี้');start.type='button';start.addEventListener('click',()=>send('start_goal',{target_date:r.target_date,...(chosenPrice!==null&&Number(chosenPrice)!==Number(r.quote.effective)?{simulated_price:chosenPrice}:{})}));actions.append(start);
+        }
         const leaks=make('button','cursor-interaction','ช่วยหาเงินเพิ่มจากรายจ่ายที่ลดได้');leaks.type='button';leaks.addEventListener('click',()=>{if(window.openai?.sendFollowUpMessage)window.openai.sendFollowUpMessage({prompt:'จับโป๊ะรายจ่าย เพื่อช่วยวางแผนซื้อ '+r.product.name+(data.demo?' ใช้ข้อมูลจำลอง':'')});else feedback.textContent='พิมพ์ในแชท: จับโป๊ะรายจ่าย';});actions.append(leaks);
         const installments=make('button','cursor-interaction','เปรียบเทียบซื้อสดกับผ่อน');installments.type='button';installments.addEventListener('click',()=>{if(window.openai?.sendFollowUpMessage)window.openai.sendFollowUpMessage({prompt:'เปรียบเทียบซื้อสดกับผ่อนสำหรับ '+r.product.name+' โดยขอเงื่อนไขดอกเบี้ยและค่าธรรมเนียมที่ยังไม่ทราบก่อน'});else feedback.textContent='พิมพ์ในแชท: เปรียบเทียบซื้อสดกับผ่อน';});actions.append(installments);
         button(actions,'อยากซื้อวันนี้เลย','buy_today');button(actions,'หาราคาที่ถูกกว่า','cheaper');button(actions,'เปลี่ยนสินค้า','change_product');button(actions,'ยังไม่ซื้อ','skip');content.append(actions);

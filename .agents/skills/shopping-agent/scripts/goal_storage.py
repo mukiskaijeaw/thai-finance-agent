@@ -2,16 +2,15 @@
 import json
 import sqlite3
 import hashlib
-import os
 from contextlib import closing
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
-from goal_engine import normalize_goal, amount
+from goal_engine import normalize_goal, amount, feasibility_status
 
 
 def default_store(synthetic=False):
-    return Path(os.environ.get('SHOPPING_WORKSPACE',str(Path.cwd()))).resolve()/'local'/('demo-goals.sqlite3' if synthetic else 'goals.sqlite3')
+    return Path(__file__).resolve().parents[4]/'local'/('demo-goals.sqlite3' if synthetic else 'goals.sqlite3')
 
 
 class GoalStore:
@@ -38,7 +37,7 @@ class GoalStore:
         if consent is not True:raise ValueError('explicit_confirmation_required')
         if type(expected_revision) is not int or not isinstance(operation_id,str) or not operation_id.strip():
             raise ValueError('revision_and_operation_id_required')
-        if action not in ('create','edit','activate','pause','delete','record_savings'):
+        if action not in ('create','edit','activate','pause','delete','record_savings','allocate'):
             raise ValueError('unknown_goal_action')
         self.path.parent.mkdir(parents=True,exist_ok=True)
         db=sqlite3.connect(self.path,timeout=10,isolation_level=None)
@@ -59,9 +58,13 @@ class GoalStore:
             goals=snapshot['goals'];entry=None
             if action=='create':
                 goal=normalize_goal(data,current)
+                if any(g.get('status')!='DELETED' and g.get('goal_name','').strip().casefold()==goal['goal_name'].strip().casefold() and amount(g.get('target_amount'))==amount(goal['target_amount']) and g.get('target_date')==goal['target_date'] for g in goals):
+                    raise ValueError('duplicate_goal_review_existing')
+                # Creating an objective never reserves future cash.
+                goal['allocation_enabled']=False
                 goal.update(goal_id=str(uuid4()),status='DRAFT')
                 if goal.pop('activate_on_create',False) is True:
-                    goal.update(status='ACTIVE',activated_on=current.isoformat())
+                    goal.update(status='ACTIVE',activated_on=current.isoformat(),allocation_enabled=True)
                 goals.append(goal)
             else:
                 goal=next((g for g in goals if g['goal_id']==data.get('goal_id')),None)
@@ -72,11 +75,20 @@ class GoalStore:
                     goal.update({k:v for k,v in data.items() if k in allowed})
                     goal.update(normalize_goal(goal,current))
                 elif action=='activate':
-                    goal['status']='ACTIVE';goal.setdefault('activated_on',current.isoformat())
+                    goal['status']='ACTIVE';goal['allocation_enabled']=True;goal.setdefault('activated_on',current.isoformat())
+                elif action=='allocate':
+                    if set(data)-{'goal_id','funding_source','saved_amount'}:raise ValueError('unsupported_allocation_field')
+                    if data.get('funding_source')!='free_cash':raise ValueError('confirm_free_cash_funding')
+                    if goal.get('saved_amount') is None:
+                        if amount(data.get('saved_amount'))!=0:raise ValueError('confirm_existing_savings_separately')
+                        goal['saved_amount']='0'
+                    goal['funding_source']='free_cash';goal['allocation_enabled']=True
                 elif action=='pause':goal['status']='PAUSED'
                 elif action=='delete':goal['status']='DELETED'
                 else:
                     if goal['status']!='ACTIVE':raise ValueError('activate_goal_before_recording')
+                    if goal.get('funding_source')!='free_cash' or goal.get('saved_amount') is None:
+                        raise ValueError('confirm_saved_amount_and_funding_source')
                     day=date.fromisoformat(data.get('date',current.isoformat()))
                     if not date.fromisoformat(goal['activated_on'])<=day<=current:
                         raise ValueError('savings_date_outside_active_history')
@@ -90,13 +102,18 @@ class GoalStore:
             report=validate(goals)
             if not isinstance(report,dict) or report.get('status') not in ('FEASIBLE','NOT_FEASIBLE','INSUFFICIENT_DATA'):
                 raise ValueError('portfolio_validation_required')
-            if action not in ('pause','delete','record_savings') and report['status']!='FEASIBLE':
+            if action in ('record_savings','allocate') and report['status']!='FEASIBLE':
                 raise ValueError('plan_not_feasible_or_incomplete_review_before_save')
+            assessment=validate([dict(g,status='ACTIVE',allocation_enabled=True) if g['goal_id']==goal['goal_id'] else g for g in goals])
+            feasibility=feasibility_status(assessment)
+            goal['feasibility']=feasibility
             db.execute('INSERT OR REPLACE INTO goals VALUES(?,?)',(goal['goal_id'],json.dumps(goal,ensure_ascii=False)))
             if entry:db.execute('INSERT INTO savings VALUES(?,?,?)',entry)
             revision=snapshot['revision']+1
             db.execute('UPDATE meta SET value=? WHERE key="revision"',(str(revision),))
-            response=dict(revision=revision,goal=goal,portfolio_status=report['status'])
+            response=dict(revision=revision,goal=goal,portfolio_status=report['status'],
+                          feasibility=feasibility,
+                          funds_allocated=False)
             db.execute('INSERT INTO operations VALUES(?,?,?)',(operation_id,json.dumps(response,ensure_ascii=False),fingerprint))
             db.execute('COMMIT');return response
         except Exception:

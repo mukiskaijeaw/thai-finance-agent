@@ -50,6 +50,13 @@ class DashboardTests(unittest.TestCase):
         self.app.commit(dict(review=a['review'],confirmed=True))
         with self.assertRaises(ValueError):self.app.commit(dict(review=b['review'],confirmed=True))
         self.assertEqual(len(self.app.store.read()['goals']),1)
+    def test_simulated_goal_label_survives_review_and_save(self):
+        goal=dict(self.goal(),simulated_price='true')
+        review=self.app.review(dict(action='create',goal=goal))
+        self.assertIs(review['goal']['simulated_price'],True)
+        result=self.app.commit(dict(review=review['review'],confirmed=True))
+        self.assertIs(result['goal']['simulated_price'],True)
+        self.assertIs(self.app.store.read()['goals'][0]['simulated_price'],True)
     def test_purchase_estimate_no_goal_or_transaction_write(self):
         result=self.app.purchase(dict(name='Any product',price='4500',shipping='50'))
         self.assertEqual(result['total'],'4550');self.assertEqual(result['remaining'],'1950')

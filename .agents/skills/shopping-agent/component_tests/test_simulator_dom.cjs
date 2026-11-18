@@ -1,6 +1,7 @@
 // View-model/input-event unit tests, not a browser or drag test.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),{test}=require('node:test');
-const folder=process.env.SIMULATOR_PREVIEW_DIR || (()=>{throw Error('Run scripts/test_simulator_view.py --node node, which prepares synthetic fixtures');})();
+const folder=process.env.SIMULATOR_PREVIEW_DIR;
+if(!folder)throw new Error('Run scripts/test_simulator_view.py to generate synthetic previews');
 function mount(file){
  const html=fs.readFileSync(folder+file,'utf8'),nodes=new Map();
  for(const match of html.matchAll(/\bid="([^"]+)"/g)){nodes.set(match[1],{textContent:'',hidden:false,value:'',attributes:{},listeners:{},dataset:{},style:{setProperty(k,v){this[k]=v}},setAttribute(k,v){this.attributes[k]=v},addEventListener(k,v){this.listeners[k]=v}})}

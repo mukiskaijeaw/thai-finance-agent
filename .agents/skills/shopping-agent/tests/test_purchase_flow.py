@@ -1,4 +1,7 @@
 import copy
+import csv
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -56,6 +59,52 @@ class PurchaseFlowTests(unittest.TestCase):
         self.assertIsNone(reject(chosen)['selected_product'])
         self.assertEqual(reject(chosen,True)['stage'],'SEARCH_REQUIRED')
 
+    def test_select_second_existing_candidate_without_search(self):
+        state=candidates(new_session(),[listing('Model A'),listing('Model B')],{},DAY)
+        chosen=select(state,state['candidates'][1]['id'],True)
+        self.assertEqual(chosen['selected_product']['name'],'Model B')
+        result=run_purchase(dict(action='evaluate',session=chosen,precompute_dates=False),self.store,DAY)
+        self.assertEqual(result['report']['product']['name'],'Model B')
+        self.assertEqual(result['report']['financial']['status'],'INSUFFICIENT_DATA')
+
+    def test_advisory_budget_is_visible_when_current_cash_is_missing(self):
+        rows=[{'transaction_id':'i','date':'2028-02-01','year_month':'2028-02','transaction_type':'income','amount_thb':'10000','category':'Salary'},
+              {'transaction_id':'e','date':'2028-02-02','year_month':'2028-02','transaction_type':'expense','amount_thb':'2000','category':'Other'}]
+        financial_context={'cycle':{'start':'2028-02-01','start_confirmed':True,'expenses_complete':True,
+                                    'commitments':[],'commitments_complete':True}}
+        result=run_purchase(dict(action='evaluate',session=selected(),precompute_dates=False,
+                                 transactions=rows,financial_context=financial_context),self.store,DAY)
+        self.assertEqual(result['report']['advisory_context']['estimated_budget'],'8000')
+        self.assertEqual(result['report']['financial']['status'],'INSUFFICIENT_DATA')
+        self.assertEqual(result['report']['decision']['follow_up_questions'],[])
+        from purchase_renderer import render_purchase_markdown
+        text=render_purchase_markdown(result)
+        self.assertIn('8000',text);self.assertIn('ไม่ใช่ยอดเงินสด',text)
+
+    def test_financial_assessment_reads_synthetic_provider_history_without_balance(self):
+        from engine import SCHEMA
+        from goal_engine import today_bangkok
+        day=today_bangkok();root=Path(self.tmp.name)/'provider';root.mkdir()
+        (root/'AGENTS.md').write_text('synthetic provider',encoding='utf-8')
+        (root/'financial_profile.json').write_text(json.dumps({'schema_version':1,'profile':{'income':'15000'}}),encoding='utf-8')
+        rows=[]
+        for ident,kind,value in [('i','income','15000'),('e','expense','4000')]:
+            r=dict.fromkeys(SCHEMA,'');r.update(transaction_id=ident,date=day.isoformat(),year_month=day.strftime('%Y-%m'),transaction_type=kind,amount_thb=value,category='Other');rows.append(r)
+        with (root/'database.csv').open('w',encoding='utf-8',newline='') as out:
+            writer=csv.DictWriter(out,fieldnames=SCHEMA);writer.writeheader();writer.writerows(rows)
+        before=(root/'database.csv').read_bytes()
+        request=dict(action='evaluate',session=selected(),precompute_dates=False)
+        script=Path(__file__).resolve().parents[1]/'scripts'/'shopping.py'
+        proc=subprocess.run([sys.executable,str(script),'purchase','--finance-dir',str(root),'--store',str(self.store.path)],input=json.dumps(request),text=True,encoding='utf-8',capture_output=True,check=True)
+        result=json.loads(proc.stdout)['report']
+        self.assertEqual(result['advisory_context']['level'],'HISTORICAL_CONTEXT')
+        observed=result['advisory_context']['history']['monthly_observed'][day.strftime('%Y-%m')]
+        self.assertEqual(observed['income'],'15000.00');self.assertEqual(observed['expense'],'4000.00')
+        self.assertIsNone(result['advisory_context']['current_available_cash'])
+        self.assertEqual(result['financial']['status'],'INSUFFICIENT_DATA')
+        self.assertEqual((root/'database.csv').read_bytes(),before)
+        self.assertFalse(self.store.path.exists())
+
     def test_default_month_end_affordable_no_goal_created(self):
         r=run_purchase(self.request(),self.store,DAY)['report']
         self.assertEqual(r['target_date'],'2028-02-29')
@@ -64,13 +113,13 @@ class PurchaseFlowTests(unittest.TestCase):
         self.assertEqual(r['decision']['recommendation'],'BUY_NOW')
         self.assertFalse(self.store.path.exists())
 
-    def test_existing_goals_protected_once(self):
+    def test_created_goal_does_not_allocate_but_saved_money_is_protected(self):
         from goal_planner import run
         run(dict(action='create',goal=goal(target_amount='600',saved_amount='100'),profile=self.p,budget=self.b,
                  operation_id='existing',expected_revision=0),self.store,DAY,True)
         r=run_purchase(self.request(),self.store,DAY)['report']
-        self.assertEqual(r['available_spending'],'2400.00')
-        self.assertEqual(r['remaining_after_purchase'],'2080.00')
+        self.assertEqual(r['available_spending'],'2900')
+        self.assertEqual(r['remaining_after_purchase'],'2580')
 
     def test_missing_shipping_not_affordable_and_price_refresh(self):
         request=self.request();request['session']['selected_product']['listing']['shipping']=None
@@ -113,6 +162,40 @@ class PurchaseFlowTests(unittest.TestCase):
         request.update(action='confirm_goal',review_token=preview['report']['review_token'],funding_source_confirmed=True,expected_revision=0,operation_id='start')
         request['profile']=dict(self.p,cash='6000')
         with self.assertRaisesRegex(ValueError,'review_updated'):run_purchase(request,self.store,DAY,True)
+
+    def test_confirm_goal_without_financial_profile_or_saved_balance(self):
+        request=dict(action='start_goal',session=selected(),precompute_dates=False)
+        preview=run_purchase(request,self.store,DAY)
+        self.assertEqual(preview['report']['goal_plan']['status'],'INSUFFICIENT_DATA')
+        confirm=dict(request,action='confirm_goal',review_token=preview['report']['review_token'],
+                     expected_revision=0,operation_id='unknown-finances')
+        saved=run_purchase(confirm,self.store,DAY,True)['goal_saved']
+        self.assertEqual(saved['goal']['feasibility'],'UNKNOWN')
+        self.assertIsNone(saved['goal']['saved_amount'])
+        self.assertTrue(saved['goal']['allocation_enabled'])
+        self.assertEqual(saved['goal']['funding_source'],'unallocated')
+        self.assertFalse(saved['funds_allocated'])
+        with self.assertRaises(ValueError):run_purchase(confirm,self.store,DAY,True)
+
+    def test_confirm_goal_with_insufficient_money(self):
+        request=self.request('start_goal',purchase_saved_amount='0')
+        request['profile']=dict(self.p,cash='0')
+        preview=run_purchase(request,self.store,DAY)
+        confirm=dict(request,action='confirm_goal',review_token=preview['report']['review_token'],
+                     expected_revision=0,operation_id='low-cash')
+        saved=run_purchase(confirm,self.store,DAY,True)['goal_saved']
+        self.assertTrue(saved['goal']['allocation_enabled'])
+        self.assertNotEqual(saved['feasibility'],'FEASIBLE')
+
+    def test_monthly_advice_is_a_scenario_not_cash(self):
+        from advisory import monthly_allocation
+        result=monthly_allocation({'income':'40000','allocations':[
+            {'name':'essential','amount':'20000','status':'CONFIRMED'},
+            {'name':'travel','amount':'3000','status':'ASSUMED'}]})
+        self.assertEqual(result['unallocated'],'17000.00')
+        self.assertIsNone(result['current_available_cash'])
+        self.assertEqual(result['allocations'][1]['status'],'ASSUMED')
+        self.assertFalse(self.store.path.exists())
 
     def test_skip_does_not_write_and_ui_source_is_reused(self):
         r=run_purchase(dict(action='skip',session=selected()),self.store,DAY)

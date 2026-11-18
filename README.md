@@ -67,3 +67,7 @@ python .agents/skills/shopping-agent/scripts/test_simulator_view.py --node node
 ```
 
 Optional PNG renderer tests require Pillow and supported Thai fonts. Core financial commands do not import Pillow. Tests use synthetic data and temporary databases. DOM simulations do not certify inline behavior in every Codex version.
+
+## Paoween Shopping integration
+
+The current Shopping Skill is under `.agents/skills/shopping-agent`. A snapshot of its host integration is in [integrations/paoween](integrations/paoween/README.md). The integration requires an existing matching Paoween application; the repository's standalone dashboard remains an isolated synthetic demo. Personal ledger, profile, receipts, and saved goals are not included.
