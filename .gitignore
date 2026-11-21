@@ -2,6 +2,12 @@
 *.csv
 !database.example.csv
 !tax_preparation.example.csv
+!*.example.csv
+agent_state.json
+my-dashboard.html
+profile.json
+alerts.txt
+Port_db.csv
 database.csv
 tax_preparation.csv
 tax_preparation_2568_source.csv

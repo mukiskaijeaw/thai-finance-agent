@@ -7,7 +7,7 @@ Open-source starter kit for tracking personal income, spending, investments, and
 1. Clone or download this repository into a private folder on your computer.
 2. Copy `database.example.csv` to `database.csv` and `tax_preparation.example.csv` to `tax_preparation.csv`. Never replace existing local data files.
 3. Open the folder in Codex and ask it to follow `AGENTS.md`.
-4. To use the bundled project skill, invoke `$finance` from a Codex environment that supports repository skills. The skill is in `.agents/skills/finance/`.
+4. Send a slip or statement, or say hi to get น้องเป๋าวีน's menu. The skills are in `.agents/skills/` (`income-expense`, `subscription`, `dashboard`, `pao-ween`, and the team's `finance` skill for tax screening).
 
 The example CSV files contain headers only. The real CSV filenames, receipts, tax documents, and logs are excluded by `.gitignore`; keep those files local and inspect the staged file list before publishing changes.
 
@@ -21,7 +21,25 @@ See [THAI_TAX_GUIDE.md](THAI_TAX_GUIDE.md) for a practical screening guide. It d
 
 ## Open the dashboard on macOS
 
-Double-click `open-dashboard.command` and leave its Terminal window running. The read-only dashboard loads the local CSV files from `127.0.0.1:8765`. Reload the page after updating CSV data. If opened directly with `file://`, select both CSV files in the page's file picker.
+Double-click `open-dashboard.command`. It builds `my-dashboard.html` from your local `database.csv` and opens it; no server is needed. Run it again after new entries. `my-dashboard.html` holds your data and is ignored by Git.
+
+## Pillar 1 (income and expense) and Pillar 5 (subscription alerts)
+
+These come from muk's [my-finance](https://github.com/mukiskaijeaw/my-finance) repo and replace the starter kit's single-skill version.
+
+- **System-1** (`agent/`): plain Python on your machine, no network. It classifies each transaction with a confidence score: 90% and up is recorded automatically, 60 to 89% goes to Codex, below 60% asks you. It learns from earlier rows and your answers (`rules.csv`).
+- **Skills** (`.agents/skills/`, mirrored for Claude Code in `.claude/skills/`): `income-expense` reads slips and statements, `subscription` finds recurring charges and warns before renewals and due dates, `dashboard` builds `my-dashboard.html` when you ask for a summary, and `pao-ween` greets you as น้องเป๋าวีน with tap-to-choose options.
+- **Dashboards**: `dashboard-journal.html` (journal look) and `dashboard-folder.html` (folder tabs) read `database.csv` and `agent_state.json`; `dashboard.html` is the earlier one. `open-dashboard.command` runs `python3 agent/cli.py dashboard --open`.
+- **Ledger**: `database.csv` now uses muk's 11 columns (no `model`, `token_input`, `token_output`). See `AGENTS.md`.
+
+Try one round with synthetic data (your real data is not touched):
+
+```sh
+mkdir -p /tmp/try && cp demo/database.example.csv /tmp/try/database.csv
+python3 agent/cli.py --dir /tmp/try --today 2026-11-12 ingest demo/statement-2026-11.example.csv
+python3 agent/cli.py --dir /tmp/try review
+python3 agent/cli.py --dir /tmp/try --today 2026-11-12 alerts --days 7
+```
 
 ## Teammate agents in this repo
 
