@@ -30,3 +30,9 @@ attachments/
 .DS_Store
 *.log
 *.session.jsonl
+
+# Teammate agents: local state and the shopping dashboard's wallet art
+local/
+**/local/
+__pycache__/
+!shopping-agent/dashboard/assets/*.png

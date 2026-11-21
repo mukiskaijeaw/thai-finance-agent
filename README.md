@@ -23,6 +23,22 @@ See [THAI_TAX_GUIDE.md](THAI_TAX_GUIDE.md) for a practical screening guide. It d
 
 Double-click `open-dashboard.command` and leave its Terminal window running. The read-only dashboard loads the local CSV files from `127.0.0.1:8765`. Reload the page after updating CSV data. If opened directly with `file://`, select both CSV files in the page's file picker.
 
+## Teammate agents in this repo
+
+Two teammates' agents are included as their own folders, imported with `git subtree` so their commit history is kept:
+
+| Folder | What it is | Source |
+|---|---|---|
+| `shopping-agent/` | Shopping / price-comparison agent: Codex skill in `shopping-agent/.agents/skills/shopping-agent/`, standalone demo dashboard in `shopping-agent/dashboard/`, Paoween host snapshot in `shopping-agent/integrations/paoween/` | [natanonlee/shopping-agent](https://github.com/natanonlee/shopping-agent) |
+| `invest-agent/` | Proactive Wealth Coach investment agent: prompt/skill in `invest-agent/skill.md`, guide in `invest-agent/README.md`. It keeps the portfolio in a local `Port_db.csv`, which `.gitignore` keeps out of Git | [Chinnakrit-jun/AI-Agent-for-invest](https://github.com/Chinnakrit-jun/AI-Agent-for-invest) |
+
+Each folder still follows its own README. To use one with Codex, open that folder (or point Codex at its skill file). To pull a teammate's newer changes later:
+
+```sh
+git subtree pull --prefix=shopping-agent https://github.com/natanonlee/shopping-agent.git main
+git subtree pull --prefix=invest-agent https://github.com/Chinnakrit-jun/AI-Agent-for-invest.git main
+```
+
 ## Privacy
 
 This repository contains no real transaction or tax records. Local files are ignored by Git. Use synthetic data in issues and screenshots, and do not upload financial data to external services.
